@@ -29,6 +29,7 @@ ENV/
 env/
 venv.bak/
 venv_backup/
+.env
 
 # Test and Coverage reports
 .coverage
