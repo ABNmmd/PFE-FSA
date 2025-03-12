@@ -3,4 +3,3 @@ pymongo
 python-dotenv
 bcrypt
 PyJWT
-bson
