@@ -4,6 +4,7 @@ from services.database import get_db
 import os
 import jwt
 from functools import wraps
+from bson import ObjectId
 
 user_bp = Blueprint('user', __name__, url_prefix='/user')
 db = get_db()
@@ -19,7 +20,7 @@ def token_required(f):
             token = token.split(" ")[1]
             data = jwt.decode(token, os.getenv("SECRET_KEY"), algorithms=["HS256"])
             user_id = data['user_id']
-            user = db.users.find_one({"_id": user_id})
+            user = db.users.find_one({"_id": ObjectId(user_id)})
             if user is None:
                 return jsonify({'message': 'Invalid User'}), 403
         except Exception as e:
