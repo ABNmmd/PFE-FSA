@@ -37,7 +37,7 @@ class User:
         user = db.users.find_one({"username": username})
         if user:
             user_obj = User(user['username'], user['email'], user['password'])
-            user_obj.id = user['_id']
+            user_obj.id = str(user['_id'])
             return user_obj
         return None
 
