@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 
 function Login() {
   const [username, setUsername] = useState('');
@@ -19,14 +20,22 @@ function Login() {
     return errors;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const validationErrors = validate();
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length === 0) {
-      // Handle login logic here
-      console.log('Username:', username);
-      console.log('Password:', password);
+      try {
+        const response = await axios.post('http://127.0.0.1:5000/user/login', {
+          username,
+          password,
+        });
+        console.log('Login successful:', response.data);
+        // Handle successful login (e.g., redirect to dashboard)
+      } catch (error) {
+        console.error('Login error:', error);
+        setErrors({ api: 'Login failed. Please check your credentials and try again.' });
+      }
     }
   };
 
@@ -57,6 +66,7 @@ function Login() {
             />
             {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
           </div>
+          {errors.api && <p className="text-red-500 text-sm mt-1">{errors.api}</p>}
           <button type="submit" className="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Login</button>
         </form>
         <p className="mt-4 text-center text-sm text-gray-600">
