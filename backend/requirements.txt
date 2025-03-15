@@ -3,3 +3,4 @@ pymongo
 python-dotenv
 bcrypt
 PyJWT
+flask-cors
