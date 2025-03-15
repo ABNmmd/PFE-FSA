@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import axios from 'axios';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 function Register() {
   const [username, setUsername] = useState('');
@@ -8,6 +8,9 @@ function Register() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState({});
+
+  const { register } = useAuth();
+  const navigate = useNavigate();
 
   const validate = () => {
     const errors = {};
@@ -36,13 +39,8 @@ function Register() {
     setErrors(validationErrors);
     if (Object.keys(validationErrors).length === 0) {
       try {
-        const response = await axios.post('http://127.0.0.1:5000/user/register', {
-          username,
-          email,
-          password,
-        });
-        console.log('Registration successful:', response.data);
-        // Handle successful registration (e.g., redirect to login page)
+        await register({ username, email, password });
+        navigate('/login'); // Redirect to login after successful registration
       } catch (error) {
         console.error('Registration error:', error);
         setErrors({ api: 'Registration failed. Please try again.' });
