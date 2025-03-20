@@ -1,10 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, session, redirect
 from user.models import User
 from services.database import get_db
 import os
 import jwt
 from functools import wraps
 from bson import ObjectId
+from services.google_oauth import get_google_flow, get_google_user_email, credentials_to_dict
 
 user_bp = Blueprint('user', __name__, url_prefix='/user')
 db = get_db()
@@ -20,9 +21,7 @@ def token_required(f):
             token = token.split(" ")[1]
             data = jwt.decode(token, os.getenv("SECRET_KEY"), algorithms=["HS256"])
             user_id = data['user_id']
-            user = db.users.find_one({"_id": ObjectId(user_id)})
-            if user is None:
-                return jsonify({'message': 'Invalid User'}), 403
+            request.user_id = user_id  # Store user_id in the request object
         except Exception as e:
             print(e)
             return jsonify({'message': 'Token is invalid!'}), 401
@@ -68,3 +67,25 @@ def login():
 @token_required
 def protected():
     return jsonify({'message': 'This is a protected route'}), 200
+
+@user_bp.route('/google/login')
+def google_login():
+    flow = get_google_flow()
+    authorization_url, state = flow.authorization_url(access_type='offline', prompt='consent')
+    session['state'] = state
+    return redirect(authorization_url)
+
+@user_bp.route('/google/callback')
+def google_callback():
+    flow = get_google_flow()
+    flow.fetch_token(authorization_response=request.url)
+
+    credentials = flow.credentials
+    user_email = get_google_user_email(credentials.token)
+
+    user = User.get_user_by_email(user_email)
+    if user:
+        user.update_google_credentials(credentials_to_dict(credentials))
+        return jsonify({"message": "Google Drive connected successfully!"})
+    else:
+        return jsonify({"message": "User not found"}), 404
