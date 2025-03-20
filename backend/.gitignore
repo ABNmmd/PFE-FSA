@@ -55,3 +55,6 @@ instance/
 
 # VSCode settings
 .vscode/
+
+# google client secret
+client_secret.json
