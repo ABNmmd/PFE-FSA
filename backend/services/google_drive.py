@@ -24,3 +24,27 @@ def list_files(user_credentials):
     files = results.get("files", [])
 
     return files
+
+def get_download_link(user_credentials, file_id):
+    """Get the download link for a file in Google Drive."""
+    credentials = Credentials.from_authorized_user_info(user_credentials)
+    drive_service = build("drive", "v3", credentials=credentials)
+
+    file = drive_service.files().get(fileId=file_id, fields='webContentLink').execute()
+    return file.get('webContentLink')
+
+def download_file(user_credentials, file_id):
+    """Downloads a file from Google Drive."""
+    credentials = Credentials.from_authorized_user_info(user_credentials)
+    drive_service = build("drive", "v3", credentials=credentials)
+
+    request = drive_service.files().get_media(fileId=file_id)
+    file = io.BytesIO()
+    downloader = MediaIoBaseDownload(file, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+        print(F'Download {int(status.progress() * 100)}.')
+
+    file.seek(0)
+    return file
