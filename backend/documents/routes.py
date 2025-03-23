@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from services.google_drive import upload_file, list_files
+from services.google_drive import GoogleDriveService
 from user.models import User
 from documents.models import Document
 from services.database import get_db
@@ -32,10 +32,11 @@ def upload_document():
         return jsonify({"message": "User not connected to Google Drive"}), 401
 
     try:
-        file_id = upload_file(user.google_credentials, file)
-        document = Document(str(user.id), file.filename, file.filename.rsplit('.', 1)[1].lower(), file_id)
-        document.save()
-        return jsonify({"message": "File uploaded", "file_id": file_id}), 200
+        with GoogleDriveService(user.google_credentials) as drive_service:
+            file_id = drive_service.upload_file(file)
+            document = Document(str(user.id), file.filename, file_id, file.filename.rsplit('.', 1)[1].lower())
+            document.save()
+            return jsonify({"message": "File uploaded", "file_id": file_id}), 200
     except Exception as e:
         return jsonify({"message": str(e)}), 500
 
@@ -61,7 +62,8 @@ def list_drive_documents():
         return jsonify({"message": "User not connected to Google Drive"}), 401
 
     try:
-        files = list_files(user.google_credentials)
-        return jsonify(files), 200
+        with GoogleDriveService(user.google_credentials) as drive_service:
+            files = drive_service.list_files()
+            return jsonify(files), 200
     except Exception as e:
         return jsonify({"message": str(e)}), 500
