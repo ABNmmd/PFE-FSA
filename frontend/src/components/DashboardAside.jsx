@@ -27,7 +27,7 @@ function DashboardAside({ arr = [] }) {
         <aside className={`left-0 top-0 bg-white h-screen w-fit py-4 px-2 shadow-md flex ${!isSidebarVisible && "items-center"} flex-col transition-all duration-300 ease-in-out ${isSidebarVisible ? 'w-64' : 'w-16'}`}>
             <div className={`mb-10 ${isSidebarVisible && "flex justify-between items-center"} p-2`}>
                 {isSidebarVisible && <h1 className="text-2xl font-bold">Plagiat</h1>}
-                <button className='text-2xl text-gray-600 hover:text-gray-800 transition-colors' onClick={toggleSidebar} aria-label={isSidebarVisible ? "Hide sidebar" : "Show sidebar"}>
+                <button className='text-2xl text-gray-600 hover:text-gray-800 transition-colors cursor-pointer' onClick={toggleSidebar} aria-label={isSidebarVisible ? "Hide sidebar" : "Show sidebar"}>
                     {isSidebarVisible ? <CgMenuMotion /> : <CgMenu />}
                 </button>
             </div>
@@ -48,7 +48,7 @@ function DashboardAside({ arr = [] }) {
                             >
                                 <button
                                     onClick={() => {}}
-                                    className={`${isSidebarVisible && "flex items-center justify-between text-base"} text-lg block w-full p-2 text-gray-400 hover:text-white transition-colors focus:outline-none`}
+                                    className={`${isSidebarVisible && "flex items-center justify-between text-base"} text-lg block w-full p-2 text-gray-400 hover:text-white transition-colors focus:outline-none cursor-pointer`}
                                 >
                                     <div className={isSidebarVisible && "flex items-center"}>
                                         {item.icon}
