@@ -6,6 +6,7 @@ import jwt
 from functools import wraps
 from bson import ObjectId
 from services.google_oauth import get_google_flow, get_google_user_email, credentials_to_dict
+from urllib.parse import urlencode
 
 user_bp = Blueprint('user', __name__, url_prefix='/user')
 db = get_db()
@@ -78,14 +79,19 @@ def google_login():
 @user_bp.route('/google/callback')
 def google_callback():
     flow = get_google_flow()
-    flow.fetch_token(authorization_response=request.url)
+    try:
+        flow.fetch_token(authorization_response=request.url)
+        credentials = flow.credentials
+        user_email = get_google_user_email(credentials.token)
 
-    credentials = flow.credentials
-    user_email = get_google_user_email(credentials.token)
+        user = User.get_user_by_email(user_email)
+        if user:
+            user.update_google_credentials(credentials_to_dict(credentials))
+            params = urlencode({"success": "true", "message": "Google Drive connected successfully!"})
+        else:
+            params = urlencode({"success": "false", "message": "User not found"})
+    except Exception as e:
+        params = urlencode({"success": "false", "message": str(e)})
 
-    user = User.get_user_by_email(user_email)
-    if user:
-        user.update_google_credentials(credentials_to_dict(credentials))
-        return jsonify({"message": "Google Drive connected successfully!"})
-    else:
-        return jsonify({"message": "User not found"}), 404
+    redirect_url = f"http://localhost:5173/google-callback?{params}"
+    return redirect(redirect_url)
