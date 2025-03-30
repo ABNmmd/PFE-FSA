@@ -1,4 +1,4 @@
-import React, { use, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -7,26 +7,26 @@ const GoogleDriveCallbackHandler = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const success = urlParams.get('success');
   const message = urlParams.get('message');
-  const { setConnectedToDrive, setMessage } = useAuth()
+  const { setConnectedToDrive, setMessage, checkGoogleDriveConnection } = useAuth();
 
   useEffect(() => {
     if (success === 'true') {
-      localStorage.setItem('googleDriveConnected', 'true');
-      setConnectedToDrive(true)
+      setConnectedToDrive(true);
+      // Refresh connection status from the server
+      checkGoogleDriveConnection();
     } else {
-      localStorage.removeItem('googleDriveConnected');
-      setConnectedToDrive(false)
+      setConnectedToDrive(false);
     }
+    
     if (message) {
       setMessage(message);
     }
+    
     navigate('/dashboard');
-  }, [success, setConnectedToDrive, message, navigate, setMessage]);
-
+  }, [success, setConnectedToDrive, message, navigate, setMessage, checkGoogleDriveConnection]);
 
   return (
     <div>
-      {/* This component will redirect immediately, so no content is needed here */}
       <p>Processing Google Drive callback...</p>
     </div>
   );
