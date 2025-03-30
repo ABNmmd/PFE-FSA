@@ -7,6 +7,13 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('token') || null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [connectedToDrive, setConnectedToDrive] = useState(() => {
+    const storedState = localStorage.getItem('googleDriveConnected');
+    return storedState === null ? false : storedState === 'true';
+  });
+
+  // state for the message from the backend
+  const [message, setMessage] = useState(null);
 
   useEffect(() => {
     const loadUser = async () => {
@@ -55,8 +62,14 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
   };
 
+  const connectGoogleDrive = () => {
+    const googleOAuthURL = `${api.defaults.baseURL}/user/google/login`;
+    window.location.href = googleOAuthURL;
+  };
+
+  
   return (
-    <AuthContext.Provider value={{ token, user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ token, user, loading, login, register, logout, connectGoogleDrive, connectedToDrive, setConnectedToDrive, message, setMessage }}>
       {children}
     </AuthContext.Provider>
   );
