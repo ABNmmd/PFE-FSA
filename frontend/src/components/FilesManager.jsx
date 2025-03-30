@@ -1,21 +1,27 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { IoIosSearch, IoIosMore } from "react-icons/io";
 import { FaGoogleDrive } from "react-icons/fa6";
 import { BsFiletypeTxt, BsFiletypePdf } from "react-icons/bs";
 import { LuUpload } from "react-icons/lu";
 import Dropzone from "./Dropzone";
+import { useAuth } from "../context/AuthContext";
 
 function FilesManager() {
-    const [connectedToDrive, setConnectedToDrive] = useState(false);
     const [showDropzone, setShowDropzone] = useState(false);
     const [files, setFiles] = useState([]);
+    const { connectGoogleDrive, connectedToDrive, message } = useAuth();
 
     const handleFileUpload = (acceptedFiles) => {
         // Handle the uploaded files here
         console.log("Uploaded files:", acceptedFiles);
         // You can send the files to the backend or update the state
-        setShowDropzone(false); // Close the Dropzone after upload
+        setShowDropzone(false);
     };
+
+    const handleConnectionToDrive = () => {
+        connectGoogleDrive();
+    };
+
 
     return (
         <div className="bg-white shadow-md rounded-md p-4">
@@ -32,7 +38,10 @@ function FilesManager() {
                                 Upload
                             </button>
                         ) : (
-                            <button className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:shadow-outline flex items-center ml-4">
+                            <button
+                                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md focus:outline-none focus:shadow-outline flex items-center ml-4"
+                                onClick={handleConnectionToDrive}
+                            >
                                 <FaGoogleDrive className="mr-2" />
                                 Connect to Google Drive
                             </button>
