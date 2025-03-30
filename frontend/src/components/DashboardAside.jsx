@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { RxDashboard } from "react-icons/rx";
 import { MdOutlineExpandMore, MdArrowForwardIos } from "react-icons/md";
 import { CgMenu, CgMenuMotion } from "react-icons/cg";
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 function DashboardAside({ arr = [] }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -12,6 +13,9 @@ function DashboardAside({ arr = [] }) {
         return storedState === null ? true : storedState === 'true';
     });
 
+    const { user, logout } = useAuth();
+    const navigate = useNavigate();
+
     const toggleSidebar = () => {
         const newState = !isSidebarVisible;
         setIsSidebarVisible(newState);
@@ -19,8 +23,8 @@ function DashboardAside({ arr = [] }) {
     }
 
     const handleLogout = () => {
-        // Implement logout logic here, e.g., clearing token from local storage
-        console.log('Logout clicked');
+        logout();
+        navigate('/login');
     }
 
     return (
@@ -66,8 +70,8 @@ function DashboardAside({ arr = [] }) {
                     {isSidebarVisible && (
                         <>
                             <div className="ml-4">
-                                <p className="text-gray-800 text-sm">John Doe</p>
-                                <p className="text-gray-600 text-sm">john.doe@example.com</p>
+                                <p className="text-gray-800 text-sm">{user?.username}</p>
+                                <p className="text-gray-600 text-sm">{user?.email}</p>
                             </div>
                             <button
                                 aria-label="Expand user options"
@@ -81,8 +85,8 @@ function DashboardAside({ arr = [] }) {
                     {isOpen && isSidebarVisible && (
                         <div className="absolute right-0 bottom-11 mt-2 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-10">
                             <ul className="py-2">
-                                <li className="px-4 py-2 hover:bg-gray-100 cursor-pointer"><Link>Profile</Link></li>
-                                <li className="px-4 py-2 hover:bg-gray-100 cursor-pointer"><Link>Settings</Link></li>
+                                <li className="px-4 py-2 hover:bg-gray-100 cursor-pointer"><Link to="/profile">Profile</Link></li>
+                                <li className="px-4 py-2 hover:bg-gray-100 cursor-pointer"><Link to="/settings">Settings</Link></li>
                                 <li className="px-4 py-2 hover:bg-gray-100 cursor-pointer" onClick={handleLogout}>Logout</li>
                             </ul>
                         </div>
