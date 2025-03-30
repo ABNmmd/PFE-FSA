@@ -1,21 +1,18 @@
-import React, { useState, useEffect, use } from 'react';
+import React, { useState, useEffect } from 'react';
 import DashboardAside from '../components/DashboardAside';
 import { MdDocumentScanner } from "react-icons/md";
 import { TbReportAnalytics } from "react-icons/tb";
 import DashboardNumbers from '../components/DashboardNumbers';
 import FilesManager from '../components/filesManager';
 import { useAuth } from '../context/AuthContext';
+import { useDocuments } from '../context/DocumentContext';
 import Alert from '../components/Alert';
 
 function Dashboard() {
-  const [totalDocuments, setTotalDocuments] = useState(0);
   const [totalReports, setTotalReports] = useState(0);
   const [totalPlagiarismChecks, setTotalPlagiarismChecks] = useState(0);
-  const { message, setMessage, connectedToDrive } = useAuth()
-
-  useEffect(() => {
-    console.log(message);
-  }, [message]);
+  const { message, setMessage, connectedToDrive } = useAuth();
+  const { getDocumentCount } = useDocuments();
 
   const dashboardPages = [
     {
@@ -35,21 +32,20 @@ function Dashboard() {
     {
       id: 1,
       name: "Total Documents",
-      value: (() => totalDocuments)()
+      value: getDocumentCount()
     },
     {
       id: 2,
       name: "Total Reports",
-      value: (() => totalReports)()
+      value: totalReports
     },
     {
       id: 3,
       name: "Plagiarism Checks",
-      value: (() => totalPlagiarismChecks)()
+      value: totalPlagiarismChecks
     }
   ];
   
-
   return (
     <>
       <div className="flex h-screen bg-gray-100">
@@ -61,7 +57,6 @@ function Dashboard() {
           <section>
             <FilesManager />
           </section>
-
 
           {message && (
             <Alert
