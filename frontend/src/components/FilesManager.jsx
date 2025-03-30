@@ -55,7 +55,7 @@ function FilesManager() {
                         <h3 className="text-lg font-semibold mb-4">Upload Files</h3>
                         <Dropzone onFileUpload={handleFileUpload} />
                         <div className="flex justify-end mt-4">
-                            <button className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-md focus:outline-none focus:shadow-outline mr-2" onClick={() => setShowDropzone(false)}>
+                            <button className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-md focus:outline-none focus:shadow-outline mr-2 cursor-pointer" onClick={() => setShowDropzone(false)}>
                                 Cancel
                             </button>
                         </div>
