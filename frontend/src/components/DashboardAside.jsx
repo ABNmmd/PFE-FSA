@@ -75,7 +75,7 @@ function DashboardAside({ arr = [] }) {
                             </div>
                             <button
                                 aria-label="Expand user options"
-                                className="ml-4 font-bold text-xl text-gray-600 hover:text-gray-800 transition-colors duration-200"
+                                className="ml-4 font-bold text-xl text-gray-600 hover:text-gray-800 transition-colors duration-200 cursor-pointer"
                                 onClick={() => setIsOpen(!isOpen)}
                             >
                                 <MdOutlineExpandMore />
