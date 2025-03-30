@@ -7,6 +7,8 @@ from functools import wraps
 from bson import ObjectId
 from services.google_oauth import get_google_flow, get_google_user_email, credentials_to_dict
 from urllib.parse import urlencode
+from google.oauth2.credentials import Credentials
+import google.auth.transport.requests
 
 user_bp = Blueprint('user', __name__, url_prefix='/user')
 db = get_db()
@@ -24,7 +26,6 @@ def token_required(f):
             user_id = data['user_id']
             request.user_id = user_id  # Store user_id in the request object
         except Exception as e:
-            print(e)
             return jsonify({'message': 'Token is invalid!'}), 401
 
         return f(*args, **kwargs)
@@ -80,9 +81,40 @@ def google_login():
 def google_callback():
     flow = get_google_flow()
     try:
-        flow.fetch_token(authorization_response=request.url)
-        credentials = flow.credentials
-        user_email = get_google_user_email(credentials.token)
+        # Fetch the token
+        try:
+            flow.fetch_token(authorization_response=request.url)
+            credentials = flow.credentials
+        except Exception as e:
+            params = urlencode({"success": "false", "message": "Failed to fetch token."})
+            redirect_url = f"http://localhost:5173/google-callback?{params}"
+            return redirect(redirect_url)
+
+        if not credentials or not credentials.token:
+            params = urlencode({"success": "false", "message": "Failed to retrieve Google credentials."})
+            redirect_url = f"http://localhost:5173/google-callback?{params}"
+            return redirect(redirect_url)
+
+        # Check if the token is expired and refresh it if necessary
+        if credentials.expired and credentials.refresh_token:
+            try:
+                request_obj = google.auth.transport.requests.Request()
+                credentials.refresh(request_obj)
+            except Exception as e:
+                params = urlencode({"success": "false", "message": "Failed to refresh access token."})
+                redirect_url = f"http://localhost:5173/google-callback?{params}"
+                return redirect(redirect_url)
+
+        try:
+            user_email = get_google_user_email(credentials.token)
+            if not user_email:
+                params = urlencode({"success": "false", "message": "Failed to retrieve user email from Google."})
+                redirect_url = f"http://localhost:5173/google-callback?{params}"
+                return redirect(redirect_url)
+        except Exception as e:
+            params = urlencode({"success": "false", "message": "Failed to retrieve user email from Google."})
+            redirect_url = f"http://localhost:5173/google-callback?{params}"
+            return redirect(redirect_url)
 
         user = User.get_user_by_email(user_email)
         if user:
@@ -95,3 +127,36 @@ def google_callback():
 
     redirect_url = f"http://localhost:5173/google-callback?{params}"
     return redirect(redirect_url)
+
+@user_bp.route('/check-google-connection', methods=['GET'])
+@token_required
+def check_google_connection():
+    user_id = request.user_id
+    user = User.get_user_by_id(user_id)
+    
+    if not user:
+        return jsonify({'connected': False}), 404
+    
+    # Check if user has Google credentials
+    connected = user.google_credentials is not None
+    
+    return jsonify({'connected': connected}), 200
+
+@user_bp.route('/profile', methods=['GET'])
+@token_required
+def get_user_profile():
+    user_id = request.user_id
+    user = User.get_user_by_id(user_id)
+    
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+    
+    # Return user information (excluding sensitive data like password)
+    user_data = {
+        'id': str(user.id),
+        'username': user.username,
+        'email': user.email,
+        'has_google_drive': user.google_credentials is not None
+    }
+    
+    return jsonify(user_data), 200
