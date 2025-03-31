@@ -8,15 +8,21 @@ import { AiOutlineEye, AiOutlineWarning } from "react-icons/ai";
 import { MdCompareArrows, MdDocumentScanner } from "react-icons/md";
 import { TbReportSearch } from "react-icons/tb";
 import Dropzone from "./Dropzone";
+import FileDetailsModal from "./FileDetailsModal";
+import ConfirmDeleteModal from "./ConfirmDeleteModal";
 import { useAuth } from "../context/AuthContext";
 import { useDocuments } from "../context/DocumentContext";
+import { useToast } from "../context/ToastContext";
 
 function FilesManager() {
     const [showDropzone, setShowDropzone] = useState(false);
     const [activeDropdown, setActiveDropdown] = useState(null);
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [fileToDelete, setFileToDelete] = useState(null);
     const dropdownRef = useRef(null);
-    const { connectGoogleDrive, connectedToDrive, setMessage } = useAuth();
-    const { documents, loading, uploadMultipleDocuments, fetchDocuments, downloadDocument } = useDocuments();
+    const { showToast } = useToast();
+    const { connectGoogleDrive, connectedToDrive } = useAuth();
+    const { documents, loading, uploadMultipleDocuments, fetchDocuments, downloadDocument, deleteDocument } = useDocuments();
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -84,44 +90,46 @@ function FilesManager() {
     };
 
     const handleDownload = async (file) => {
-        setMessage(`Downloading ${file.file_name}...`);
-        try {
-            const success = await downloadDocument(file.file_id, file.file_name);
-            if (success) {
-                setMessage(`Successfully downloaded ${file.file_name}.`);
-            } else {
-                setMessage(`Failed to download ${file.file_name}.`);
-            }
-        } catch (error) {
-            console.error('Download error:', error);
-            setMessage(`Error downloading ${file.file_name}.`);
-        }
+        await downloadDocument(file.file_id, file.file_name);
         setActiveDropdown(null);
     };
 
     const handleViewDetails = (file) => {
-        setMessage(`Viewing details for ${file.file_name}`);
+        setSelectedFile(file);
         setActiveDropdown(null);
     };
 
     const handleDelete = (file) => {
-        setMessage(`Deleting ${file.file_name}...`);
+        setFileToDelete(file);
         setActiveDropdown(null);
     };
 
+    const confirmDelete = async (file) => {
+        const success = await deleteDocument(file.file_id, file.file_name);
+        setFileToDelete(null);
+    };
+
+    const cancelDelete = () => {
+        setFileToDelete(null);
+    };
+
     const handleCheckPlagiarism = (file) => {
-        setMessage(`Checking ${file.file_name} for plagiarism...`);
+        showToast(`Starting plagiarism check for ${file.file_name}...`, 'loading');
         setActiveDropdown(null);
     };
 
     const handleViewPlagiarismReport = (file) => {
-        setMessage(`Viewing plagiarism report for ${file.file_name}...`);
+        showToast(`Viewing plagiarism report for ${file.file_name}...`, 'info');
         setActiveDropdown(null);
     };
 
     const handleCompareDocuments = (file) => {
-        setMessage(`Select another document to compare with ${file.file_name}...`);
+        showToast(`Select another document to compare with ${file.file_name}...`, 'info');
         setActiveDropdown(null);
+    };
+
+    const handleCloseModal = () => {
+        setSelectedFile(null);
     };
 
     return (
@@ -267,6 +275,20 @@ function FilesManager() {
                 <div className="text-center py-8">
                     <p className="text-gray-600">Connect to Google Drive to view your files.</p>
                 </div>
+            )}
+            {selectedFile && (
+                <FileDetailsModal 
+                    file={selectedFile} 
+                    onClose={handleCloseModal} 
+                    onDownload={handleDownload}
+                />
+            )}
+            {fileToDelete && (
+                <ConfirmDeleteModal 
+                    file={fileToDelete}
+                    onConfirm={confirmDelete}
+                    onCancel={cancelDelete}
+                />
             )}
         </div>
     );
