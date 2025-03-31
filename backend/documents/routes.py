@@ -145,3 +145,63 @@ def download_document(file_id):
             )
     except Exception as e:
         return jsonify({"message": f"Error downloading file: {str(e)}"}), 500
+
+@document_bp.route('/content/<file_id>', methods=['GET'])
+@token_required
+def get_document_content(file_id):
+    user_id = request.user_id
+
+    user = User.get_user_by_id(user_id)
+    if not user or not user.google_credentials:
+        return jsonify({"message": "User not connected to Google Drive"}), 401
+
+    # Get document info from the database
+    document = Document.get_document_by_file_id(file_id)
+    if not document:
+        return jsonify({"message": "Document not found"}), 404
+
+    # Check if the document belongs to the user
+    if document.get('user_id') != str(user.id):
+        return jsonify({"message": "Access denied"}), 403
+
+    # Only support text files for content viewing
+    if document.get('file_type') != 'txt':
+        return jsonify({"message": "Content viewing not supported for this file type"}), 400
+
+    try:
+        with GoogleDriveService(user.google_credentials) as drive_service:
+            file_content = drive_service.download_file(file_id)
+            content = file_content.read().decode('utf-8')
+            return jsonify({"content": content}), 200
+    except Exception as e:
+        return jsonify({"message": f"Error getting file content: {str(e)}"}), 500
+
+@document_bp.route('/<file_id>', methods=['DELETE'])
+@token_required
+def delete_document(file_id):
+    user_id = request.user_id
+
+    user = User.get_user_by_id(user_id)
+    if not user or not user.google_credentials:
+        return jsonify({"message": "User not connected to Google Drive"}), 401
+
+    # Get document info from the database
+    document = Document.get_document_by_file_id(file_id)
+    if not document:
+        return jsonify({"message": "Document not found"}), 404
+
+    # Check if the document belongs to the user
+    if document.get('user_id') != str(user.id):
+        return jsonify({"message": "Access denied"}), 403
+
+    try:
+        with GoogleDriveService(user.google_credentials) as drive_service:
+            # Delete file from Google Drive
+            drive_service.delete_file(file_id)
+            
+            # Delete document record from database
+            Document.delete_document_by_file_id(file_id)
+            
+            return jsonify({"message": "Document deleted successfully"}), 200
+    except Exception as e:
+        return jsonify({"message": f"Error deleting file: {str(e)}"}), 500
