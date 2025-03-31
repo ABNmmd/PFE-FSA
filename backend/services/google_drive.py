@@ -57,3 +57,8 @@ class GoogleDriveService:
 
         file.seek(0)
         return file
+
+    def delete_file(self, file_id):
+        """Delete a file from Google Drive."""
+        self.drive_service.files().delete(fileId=file_id).execute()
+        return True
