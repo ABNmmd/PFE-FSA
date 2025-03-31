@@ -111,6 +111,40 @@ export const DocumentProvider = ({ children }) => {
     }
   };
 
+  const downloadDocument = async (fileId, fileName) => {
+    if (!token || !connectedToDrive) {
+      setError('You must be connected to Google Drive to download documents');
+      return false;
+    }
+
+    try {
+      const response = await api.get(`/document/download/${fileId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        responseType: 'blob' // Important: specify responseType as blob
+      });
+      
+      // Create a download link and trigger it
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      return true;
+    } catch (error) {
+      console.error('Failed to download document:', error);
+      setError('Failed to download document. Please try again.');
+      setMessage("Failed to download document");
+      return false;
+    }
+  };
+
   const getDocumentCount = () => {
     return documents.length;
   };
@@ -123,7 +157,8 @@ export const DocumentProvider = ({ children }) => {
       fetchDocuments,
       uploadDocument,
       uploadMultipleDocuments,
-      getDocumentCount
+      getDocumentCount,
+      downloadDocument
     }}>
       {children}
     </DocumentContext.Provider>
