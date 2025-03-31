@@ -39,3 +39,8 @@ class Document:
     def get_document_by_id(document_id):
         document = db.documents.find_one({"_id": ObjectId(document_id)})
         return document
+
+    @staticmethod
+    def get_document_by_file_id(file_id):
+        document = db.documents.find_one({"file_id": file_id})
+        return document
