@@ -6,12 +6,11 @@ import DashboardNumbers from '../components/DashboardNumbers';
 import FilesManager from '../components/filesManager';
 import { useAuth } from '../context/AuthContext';
 import { useDocuments } from '../context/DocumentContext';
-import Alert from '../components/Alert';
 
 function Dashboard() {
   const [totalReports, setTotalReports] = useState(0);
   const [totalPlagiarismChecks, setTotalPlagiarismChecks] = useState(0);
-  const { message, setMessage, connectedToDrive } = useAuth();
+  const { connectedToDrive } = useAuth();
   const { getDocumentCount } = useDocuments();
 
   const dashboardPages = [
@@ -57,14 +56,6 @@ function Dashboard() {
           <section>
             <FilesManager />
           </section>
-
-          {message && (
-            <Alert
-              message={message}
-              success={connectedToDrive}
-              onClose={() => setMessage(null)}
-            />
-          )}
         </main>
       </div>
     </>
