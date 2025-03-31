@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from services.google_drive import GoogleDriveService
 from user.models import User
 from documents.models import Document
@@ -111,3 +111,37 @@ def list_drive_documents():
             return jsonify(files), 200
     except Exception as e:
         return jsonify({"message": f"Error listing Google Drive files: {str(e)}"}), 500
+
+@document_bp.route('/download/<file_id>', methods=['GET'])
+@token_required
+def download_document(file_id):
+    user_id = request.user_id
+
+    user = User.get_user_by_id(user_id)
+    if not user or not user.google_credentials:
+        return jsonify({"message": "User not connected to Google Drive"}), 401
+
+    # Get document info from the database
+    document = Document.get_document_by_file_id(file_id)
+    if not document:
+        return jsonify({"message": "Document not found"}), 404
+
+    # Check if the document belongs to the user
+    if document.get('user_id') != str(user.id):
+        return jsonify({"message": "Access denied"}), 403
+
+    try:
+        with GoogleDriveService(user.google_credentials) as drive_service:
+            # Download the file directly rather than returning a URL
+            file_content = drive_service.download_file(file_id)
+            file_name = document.get('file_name', 'downloaded_file')
+            
+            # Use Flask's send_file to return the file directly to the client
+            return send_file(
+                file_content,
+                as_attachment=True,
+                download_name=file_name,
+                mimetype=document.get('mime_type', 'application/octet-stream')
+            )
+    except Exception as e:
+        return jsonify({"message": f"Error downloading file: {str(e)}"}), 500
