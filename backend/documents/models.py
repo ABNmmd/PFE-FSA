@@ -44,3 +44,8 @@ class Document:
     def get_document_by_file_id(file_id):
         document = db.documents.find_one({"file_id": file_id})
         return document
+
+    @staticmethod
+    def delete_document_by_file_id(file_id):
+        result = db.documents.delete_one({"file_id": file_id})
+        return result.deleted_count > 0
