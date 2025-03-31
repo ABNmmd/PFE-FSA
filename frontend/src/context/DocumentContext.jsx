@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
 import { useAuth } from './AuthContext';
+import { useToast } from './ToastContext';
 
 const DocumentContext = createContext();
 
@@ -9,6 +10,7 @@ export const DocumentProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const { token, connectedToDrive, setMessage } = useAuth();
+  const { showToast, showLoading, hideToast, showDownloadProgress } = useToast();
 
   useEffect(() => {
     if (token && connectedToDrive) {
@@ -30,7 +32,7 @@ export const DocumentProvider = ({ children }) => {
     } catch (error) {
       console.error('Failed to fetch documents:', error);
       setError('Failed to load your documents. Please try again.');
-      setMessage("Failed to load your documents");
+      showToast("Failed to load your documents", 'error');
     } finally {
       setLoading(false);
     }
@@ -39,6 +41,7 @@ export const DocumentProvider = ({ children }) => {
   const uploadDocument = async (file) => {
     if (!token || !connectedToDrive) {
       setError('You must be connected to Google Drive to upload documents');
+      showToast('You must be connected to Google Drive to upload documents', 'error');
       return null;
     }
 
@@ -58,13 +61,13 @@ export const DocumentProvider = ({ children }) => {
       
       // Refresh the documents list after upload
       await fetchDocuments();
-      setMessage("File uploaded successfully!");
+      showToast("File uploaded successfully!", 'success');
       
       return response.data;
     } catch (error) {
       console.error('Failed to upload document:', error);
       setError('Failed to upload document. Please try again.');
-      setMessage("Failed to upload document");
+      showToast("Failed to upload document", 'error');
       return null;
     } finally {
       setLoading(false);
@@ -74,6 +77,7 @@ export const DocumentProvider = ({ children }) => {
   const uploadMultipleDocuments = async (files) => {
     if (!token || !connectedToDrive) {
       setError('You must be connected to Google Drive to upload documents');
+      showToast('You must be connected to Google Drive to upload documents', 'error');
       return [];
     }
 
@@ -98,13 +102,13 @@ export const DocumentProvider = ({ children }) => {
       
       // Refresh the documents list after uploads
       await fetchDocuments();
-      setMessage(`${uploadedFiles.length} files uploaded successfully!`);
+      showToast(`${uploadedFiles.length} files uploaded successfully!`, 'success');
       
       return uploadedFiles;
     } catch (error) {
       console.error('Failed to upload documents:', error);
       setError('Failed to upload some documents. Please try again.');
-      setMessage("Failed to upload some documents");
+      showToast("Failed to upload some documents", 'error');
       return uploadedFiles;
     } finally {
       setLoading(false);
@@ -114,15 +118,22 @@ export const DocumentProvider = ({ children }) => {
   const downloadDocument = async (fileId, fileName) => {
     if (!token || !connectedToDrive) {
       setError('You must be connected to Google Drive to download documents');
+      showToast('You must be connected to Google Drive to download', 'error');
       return false;
     }
+
+    showToast(`Preparing to download ${fileName}...`, 'loading');
 
     try {
       const response = await api.get(`/document/download/${fileId}`, {
         headers: {
           Authorization: `Bearer ${token}`
         },
-        responseType: 'blob' // Important: specify responseType as blob
+        responseType: 'blob',
+        onDownloadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          showDownloadProgress(`Downloading ${fileName}...`, percentCompleted);
+        }
       });
       
       // Create a download link and trigger it
@@ -136,11 +147,82 @@ export const DocumentProvider = ({ children }) => {
       // Clean up
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
+      
+      showToast(`${fileName} downloaded successfully!`, 'success');
       return true;
     } catch (error) {
       console.error('Failed to download document:', error);
       setError('Failed to download document. Please try again.');
-      setMessage("Failed to download document");
+      showToast(`Failed to download ${fileName}`, 'error');
+      return false;
+    }
+  };
+
+  const getFileContent = async (fileId, fileType) => {
+    if (!token || !connectedToDrive) {
+      setError('You must be connected to Google Drive to view files');
+      showToast('You must be connected to Google Drive to view files', 'error');
+      return null;
+    }
+
+    try {
+      // For text files, fetch content directly
+      if (fileType === 'txt') {
+        const response = await api.get(`/document/content/${fileId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        return response.data.content;
+      }
+      
+      // For PDFs, get a data URL
+      else if (fileType === 'pdf') {
+        const response = await api.get(`/document/download/${fileId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          responseType: 'blob'
+        });
+        
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        return URL.createObjectURL(blob);
+      }
+      
+      // For other file types, return null (preview not supported)
+      return null;
+    } catch (error) {
+      console.error('Failed to get file content:', error);
+      setError('Failed to get file content. Please try again.');
+      showToast(`Failed to get file content`, 'error');
+      return null;
+    }
+  };
+
+  const deleteDocument = async (fileId, fileName) => {
+    if (!token || !connectedToDrive) {
+      setError('You must be connected to Google Drive to delete documents');
+      showToast('You must be connected to Google Drive to delete documents', 'error');
+      return false;
+    }
+
+    showToast(`Deleting ${fileName}...`, 'loading');
+
+    try {
+      await api.delete(`/document/${fileId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      // Refresh the documents list after deletion
+      await fetchDocuments();
+      showToast(`${fileName} has been deleted`, 'success');
+      return true;
+    } catch (error) {
+      console.error('Failed to delete document:', error);
+      setError('Failed to delete document. Please try again.');
+      showToast(`Failed to delete ${fileName}`, 'error');
       return false;
     }
   };
@@ -158,7 +240,9 @@ export const DocumentProvider = ({ children }) => {
       uploadDocument,
       uploadMultipleDocuments,
       getDocumentCount,
-      downloadDocument
+      downloadDocument,
+      getFileContent,
+      deleteDocument
     }}>
       {children}
     </DocumentContext.Provider>
