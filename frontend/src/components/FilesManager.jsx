@@ -7,6 +7,7 @@ import { RiDeleteBin6Line } from "react-icons/ri";
 import { AiOutlineEye, AiOutlineWarning } from "react-icons/ai";
 import { MdCompareArrows, MdDocumentScanner } from "react-icons/md";
 import { TbReportSearch } from "react-icons/tb";
+import { useNavigate } from 'react-router-dom';
 import Dropzone from "./Dropzone";
 import FileDetailsModal from "./FileDetailsModal";
 import ConfirmDeleteModal from "./ConfirmDeleteModal";
@@ -23,6 +24,7 @@ function FilesManager() {
     const { showToast } = useToast();
     const { connectGoogleDrive, connectedToDrive } = useAuth();
     const { documents, loading, uploadMultipleDocuments, fetchDocuments, downloadDocument, deleteDocument } = useDocuments();
+    const navigate = useNavigate();
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -119,12 +121,12 @@ function FilesManager() {
     };
 
     const handleViewPlagiarismReport = (file) => {
-        showToast(`Viewing plagiarism report for ${file.file_name}...`, 'info');
+        navigate(`/dashboard/reports/${file.file_id}`);
         setActiveDropdown(null);
     };
 
     const handleCompareDocuments = (file) => {
-        showToast(`Select another document to compare with ${file.file_name}...`, 'info');
+        navigate('/dashboard/compare');
         setActiveDropdown(null);
     };
 
