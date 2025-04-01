@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { RxDashboard } from "react-icons/rx";
-import { MdOutlineExpandMore, MdArrowForwardIos } from "react-icons/md";
+import { MdOutlineExpandMore, MdArrowForwardIos, MdDocumentScanner } from "react-icons/md";
 import { CgMenu, CgMenuMotion } from "react-icons/cg";
-import { Link, useNavigate } from 'react-router-dom';
+import { TbReportAnalytics } from "react-icons/tb";
+import { FaExchangeAlt, FaUser } from "react-icons/fa"; // Added FaUser icon
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-function DashboardAside({ arr = [] }) {
+function DashboardAside() {
     const [isOpen, setIsOpen] = useState(false);
     const [isSidebarVisible, setIsSidebarVisible] = useState(() => {
         // Get the sidebar state from local storage, or default to true
@@ -15,6 +17,34 @@ function DashboardAside({ arr = [] }) {
 
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+
+    const dashboardPages = [
+        {
+            id: 1,
+            name: "Dashboard",
+            icon: <RxDashboard />,
+            path: "/dashboard"
+        },
+        {
+            id: 2,
+            name: "Plagiarism Check",
+            icon: <MdDocumentScanner />,
+            path: "/dashboard/plagiarism" // Path to be implemented later
+        },
+        {
+            id: 3,
+            name: "Compare Documents",
+            icon: <FaExchangeAlt />,
+            path: "/dashboard/compare"
+        },
+        {
+            id: 4,
+            name: "Reports",
+            icon: <TbReportAnalytics />,
+            path: "/dashboard/reports"
+        }
+    ];
 
     const toggleSidebar = () => {
         const newState = !isSidebarVisible;
@@ -27,6 +57,13 @@ function DashboardAside({ arr = [] }) {
         navigate('/login');
     }
 
+    const isActive = (path) => {
+        if (path === '/dashboard') {
+            return location.pathname === '/dashboard';
+        }
+        return location.pathname.startsWith(path);
+    };
+
     return (
         <aside className={`left-0 top-0 bg-white h-screen w-fit py-4 px-2 shadow-md flex ${!isSidebarVisible && "items-center"} flex-col transition-all duration-300 ease-in-out ${isSidebarVisible ? 'w-64' : 'w-16'}`}>
             <div className={`mb-10 ${isSidebarVisible && "flex justify-between items-center"} p-2`}>
@@ -37,36 +74,28 @@ function DashboardAside({ arr = [] }) {
             </div>
             <nav className={`flex flex-col items-center flex-grow `}>
                 <ul className={`flex-grow space-y-4 mb-auto ${isSidebarVisible && "w-full"}`}>
-                    <li className="transition-transform duration-200 transform hover:bg-blue-700 rounded-md group">
-                        <Link to="/dashboard" aria-label="Dashboard"
-                            className={`${isSidebarVisible && "flex items-center text-base"} text-lg block text-gray-500 w-full p-2 hover:text-white transition-colors focus:outline-none`}
+                    {dashboardPages.map((item) => (
+                        <li key={item.id}
+                            className={`transition-transform duration-200 transform rounded-md group
+                                ${isActive(item.path) ? 'bg-blue-600' : 'hover:bg-blue-700'}`}
                         >
-                            <RxDashboard className="" />
-                            {isSidebarVisible && <span className="ml-6 capitalize">Dashboard</span>}
-                        </Link>
-                    </li>
-                    {
-                        arr.map((item) => (
-                            <li key={item.id}
-                                className="transition-transform duration-200 transform hover:bg-blue-700 rounded-md group"
+                            <Link 
+                                to={item.path}
+                                className={`${isSidebarVisible && "flex items-center justify-between text-base"} text-lg block w-full p-2 ${isActive(item.path) ? 'text-white' : 'text-gray-500 hover:text-white'} transition-colors focus:outline-none`}
                             >
-                                <button
-                                    onClick={() => {}}
-                                    className={`${isSidebarVisible && "flex items-center justify-between text-base"} text-lg block w-full p-2 text-gray-400 hover:text-white transition-colors focus:outline-none cursor-pointer`}
-                                >
-                                    <div className={isSidebarVisible && "flex items-center"}>
-                                        {item.icon}
-                                        {isSidebarVisible && <span className="ml-6 capitalize">{item.name}</span>}
-                                    </div>
-                                    {isSidebarVisible && <MdArrowForwardIos className={`text-sm transition-transform duration-200 group-hover:transform group-hover:translate-x-1`} />}
-                                </button>
-                            </li>
-                        )
-                        )
-                    }
+                                <div className={isSidebarVisible && "flex items-center"}>
+                                    {item.icon}
+                                    {isSidebarVisible && <span className="ml-6 capitalize">{item.name}</span>}
+                                </div>
+                                {isSidebarVisible && <MdArrowForwardIos className={`text-sm transition-transform duration-200 group-hover:transform group-hover:translate-x-1`} />}
+                            </Link>
+                        </li>
+                    ))}
                 </ul>
                 <div className="relative flex-grow-0 flex items-center mt-4">
-                    <img src="https://i.pravatar.cc/100" alt="User Avatar" className="w-9 h-9 rounded-full object-cover" />
+                    <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center">
+                        <FaUser className="text-gray-600 text-lg" />
+                    </div>
                     {isSidebarVisible && (
                         <>
                             <div className="ml-4">
