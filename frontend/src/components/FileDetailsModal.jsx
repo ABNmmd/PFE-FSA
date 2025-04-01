@@ -249,7 +249,7 @@ function FileDetailsModal({ file, onClose, onDownload }) {
                   Run Plagiarism Check
                 </button>
                 <Link 
-                  to={`/plagiarism-report/${file.file_id}`} 
+                  to={`/dashboard/reports/${file.file_id}`} 
                   className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors flex items-center"
                 >
                   <BsArrowRightSquare className="mr-2" /> View Full Report
