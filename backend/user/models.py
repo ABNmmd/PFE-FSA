@@ -73,4 +73,4 @@ class User:
         return bcrypt.checkpw(password.encode('utf-8'), self.password.encode('utf-8'))
 
     def __repr__(self):
-        return f"User(username='{self.username}', email='{self.email}', id='{self.id}')"
+        return f"User(username='{self.username}', email='{self.email}', id='{str(self.id)}')"

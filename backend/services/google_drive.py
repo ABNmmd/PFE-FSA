@@ -3,6 +3,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 import io
 import os
+from datetime import datetime
 
 class GoogleDriveService:
     def __init__(self, user_credentials):
@@ -17,13 +18,20 @@ class GoogleDriveService:
         pass
 
     def upload_file(self, file):
-        """Upload a file to Google Drive."""
-        file_metadata = {"name": file.filename}
+        """Upload a file to Google Drive and return additional metadata."""
+        file_metadata = {
+            "name": file.filename,
+            "description": f"Uploaded via Plagiarism Detection App on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        }
+        
         media = MediaIoBaseUpload(file.stream, mimetype=file.content_type)
-        uploaded_file = self.drive_service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+        uploaded_file = self.drive_service.files().create(
+            body=file_metadata, 
+            media_body=media,
+            fields="id,name,mimeType,size,createdTime"
+        ).execute()
 
         return uploaded_file["id"]
-
 
     def list_files(self, page_size=10):
         """List files in Google Drive."""
@@ -49,3 +57,8 @@ class GoogleDriveService:
 
         file.seek(0)
         return file
+
+    def delete_file(self, file_id):
+        """Delete a file from Google Drive."""
+        self.drive_service.files().delete(fileId=file_id).execute()
+        return True
