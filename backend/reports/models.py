@@ -1,4 +1,3 @@
-# reports/models.py
 from services.database import get_db
 from datetime import datetime
 from bson import ObjectId
