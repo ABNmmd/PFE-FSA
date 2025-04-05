@@ -38,7 +38,6 @@ def get_plagiarism_report(report_id):
     if not report:
         return jsonify({"message": "Report not found"}), 404
 
-    # Formater la réponse pour correspondre au format demandé
     formatted_report = {
         "_id": report["_id"],
         "date_generation": report["date_generation"].isoformat() + "Z",
