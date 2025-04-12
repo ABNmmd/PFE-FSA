@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from user.routes import user_bp
 from documents.routes import document_bp
+from report.routes import report_bp
 
 app = Flask(__name__)
 CORS(app)
@@ -14,6 +15,7 @@ app.secret_key = os.getenv("APP_SECRET_KEY")
 
 app.register_blueprint(user_bp)
 app.register_blueprint(document_bp)
+app.register_blueprint(report_bp)
 
 @app.route('/')
 def api():
