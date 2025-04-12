@@ -4,6 +4,7 @@ from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 import io
 import os
 from datetime import datetime
+from google.oauth2 import service_account
 
 class GoogleDriveService:
     def __init__(self, user_credentials):
