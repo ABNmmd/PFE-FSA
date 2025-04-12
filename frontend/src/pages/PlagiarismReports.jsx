@@ -1,125 +1,90 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FaFilePdf, FaEye, FaDownload, FaTrashAlt } from 'react-icons/fa';
-import { useDocuments } from '../context/DocumentContext';
+import { useReports } from '../context/ReportContext';
+import ReportCard from '../components/ReportCard';
 import { useToast } from '../context/ToastContext';
+import Pagination from '../components/Pagination';
 
 function PlagiarismReports() {
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const { documents } = useDocuments();
+  const { reports, loading, pagination, fetchReports, deleteReport, changePage } = useReports();
   const { showToast } = useToast();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    // Simulate fetching reports
-    const fetchReports = async () => {
-      setLoading(true);
-      try {
-        // This would be an API call in a real app
-        // For now, we'll create dummy data based on the documents
-        setTimeout(() => {
-          const dummyReports = documents.slice(0, 3).map(doc => ({
-            id: 'report-' + doc._id || doc.file_id,
-            fileId: doc.file_id,
-            fileName: doc.file_name,
-            createdAt: new Date(Date.now() - Math.floor(Math.random() * 10000000000)).toISOString(),
-            plagiarismScore: Math.floor(Math.random() * 100),
-            status: 'completed'
-          }));
-          
-          setReports(dummyReports);
-          setLoading(false);
-        }, 1500);
-      } catch (error) {
-        console.error('Error fetching reports:', error);
-        showToast('Failed to load reports', 'error');
-        setLoading(false);
-      }
-    };
-
     fetchReports();
-  }, [documents, showToast]);
+  }, [pagination.page]);
 
-  const getScoreColor = (score) => {
-    if (score < 30) return 'text-green-600';
-    if (score < 70) return 'text-yellow-600';
-    return 'text-red-600';
+  const handleDeleteReport = async (report) => {
+    if (window.confirm(`Are you sure you want to delete this report between "${report.document1?.name}" and "${report.document2?.name}"?`)) {
+      setIsDeleting(true);
+      try {
+        await deleteReport(report.id);
+        showToast('Report deleted successfully', 'success');
+      } catch (error) {
+        showToast('Failed to delete report', 'error');
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
+  const handleDownloadReport = (report) => {
+    // This will be implemented later
+    showToast('Download feature coming soon', 'info');
+  };
+
+  const handlePageChange = (page) => {
+    changePage(page);
   };
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Plagiarism Reports</h1>
+        <Link to="/dashboard/compare" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+          New Comparison
+        </Link>
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center h-64">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <div className="bg-white rounded-lg shadow-md p-6 text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
           <p className="text-gray-600">Loading reports...</p>
         </div>
       ) : reports.length > 0 ? (
-        <div className="bg-white shadow-md rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Report</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {reports.map((report) => (
-                <tr key={report.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                        <FaFilePdf className="text-red-500 text-lg" />
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{report.fileName}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">{new Date(report.createdAt).toLocaleDateString()}</div>
-                    <div className="text-sm text-gray-500">{new Date(report.createdAt).toLocaleTimeString()}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-3 py-1 inline-flex text-sm font-semibold rounded-full ${getScoreColor(report.plagiarismScore)} bg-opacity-10`}>
-                      {report.plagiarismScore}%
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 py-1 inline-flex text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                      {report.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center justify-end space-x-2">
-                      <Link to={`/dashboard/reports/${report.fileId}`} className="text-blue-600 hover:text-blue-900 p-1 flex items-center">
-                        <FaEye title="View report" />
-                      </Link>
-                      <button className="text-green-600 hover:text-green-900 p-1 flex items-center">
-                        <FaDownload title="Download report" />
-                      </button>
-                      <button className="text-red-600 hover:text-red-900 p-1 flex items-center">
-                        <FaTrashAlt title="Delete report" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-4">
+          {reports.map(report => (
+            <ReportCard 
+              key={report.id} 
+              report={report} 
+              onDelete={handleDeleteReport} 
+              onDownload={handleDownloadReport} 
+            />
+          ))}
+          
+          {pagination.pages > 1 && (
+            <Pagination 
+              currentPage={pagination.page}
+              totalPages={pagination.pages}
+              onPageChange={handlePageChange}
+            />
+          )}
         </div>
       ) : (
-        <div className="bg-white shadow-md rounded-lg p-6 text-center">
-          <p className="text-gray-600 mb-4">No plagiarism reports yet.</p>
-          <Link to="/dashboard/compare" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-            Create Your First Plagiarism Report
+        <div className="bg-white rounded-lg shadow-md p-10 text-center">
+          <p className="text-gray-600 mb-4">You don't have any plagiarism reports yet.</p>
+          <Link to="/dashboard/compare" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+            Compare Documents
           </Link>
+        </div>
+      )}
+
+      {isDeleting && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mr-2"></div>
+            <span>Deleting report...</span>
+          </div>
         </div>
       )}
     </div>
