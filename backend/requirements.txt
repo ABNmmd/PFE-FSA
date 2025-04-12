@@ -8,3 +8,18 @@ google-auth
 google-auth-oauthlib
 google-auth-httplib2
 google-api-python-client
+
+numpy
+scikit-learn
+spacy
+torch
+sentence-transformers
+langdetect
+
+# Document processing
+python-docx
+PyPDF2
+textract
+
+# Download French language model
+# Run: python -m spacy download fr_core_news_sm

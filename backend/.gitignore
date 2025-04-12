@@ -58,3 +58,9 @@ instance/
 
 # google client secret
 client_secret.json
+
+# nltk data files
+nltk_data/
+
+# test docs files
+test_docs/
