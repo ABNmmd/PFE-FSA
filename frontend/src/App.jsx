@@ -35,7 +35,7 @@ function App() {
         }>
           <Route index element={<Dashboard />} />
           <Route path="reports" element={<PlagiarismReports />} />
-          <Route path="reports/:fileId" element={<PlagiarismReport />} />
+          <Route path="reports/:reportId" element={<PlagiarismReport />} />
           <Route path="compare" element={<CompareDocuments />} />
         </Route>
         
