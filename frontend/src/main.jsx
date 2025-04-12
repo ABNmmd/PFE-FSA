@@ -4,6 +4,7 @@ import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext'
 import { DocumentProvider } from './context/DocumentContext'
 import { ToastProvider } from './context/ToastContext'
+import { ReportProvider } from './context/ReportContext'
 import './index.css'
 
 createRoot(document.getElementById('root')).render(
@@ -11,7 +12,9 @@ createRoot(document.getElementById('root')).render(
     <AuthProvider>
       <ToastProvider>
         <DocumentProvider>
-          <App />
+          <ReportProvider>
+            <App />
+          </ReportProvider>
         </DocumentProvider>
       </ToastProvider>
     </AuthProvider>
