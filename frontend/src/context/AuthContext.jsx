@@ -42,6 +42,7 @@ export const AuthProvider = ({ children }) => {
       return response.data;
     } catch (error) {
       console.error('Failed to fetch user profile', error);
+      showToast?.('Failed to load user profile', 'error');
       return null;
     }
   };
@@ -102,7 +103,14 @@ export const AuthProvider = ({ children }) => {
     window.location.href = googleOAuthURL;
   };
 
-  
+  // Add refreshUser function to update user data after settings changes
+  const refreshUser = async () => {
+    if (token) {
+      await fetchUserProfile();
+      await checkGoogleDriveConnection();
+    }
+  };
+
   return (
     <AuthContext.Provider value={{ 
       token, 
@@ -117,7 +125,8 @@ export const AuthProvider = ({ children }) => {
       message, 
       setMessage,
       checkGoogleDriveConnection,
-      fetchUserProfile
+      fetchUserProfile,
+      refreshUser
     }}>
       {children}
     </AuthContext.Provider>
