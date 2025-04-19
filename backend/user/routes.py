@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session, redirect
+from flask import Blueprint, request, jsonify, session, redirect, current_app as app, url_for
 from user.models import User
 from services.database import get_db
 import os
@@ -9,6 +9,7 @@ from services.google_oauth import get_google_flow, get_google_user_email, creden
 from urllib.parse import urlencode
 from google.oauth2.credentials import Credentials
 import google.auth.transport.requests
+from werkzeug.utils import secure_filename
 
 user_bp = Blueprint('user', __name__, url_prefix='/user')
 db = get_db()
@@ -144,19 +145,89 @@ def check_google_connection():
 
 @user_bp.route('/profile', methods=['GET'])
 @token_required
-def get_user_profile():
+def get_profile():
+    """Get user profile information."""
     user_id = request.user_id
+    
     user = User.get_user_by_id(user_id)
-    
     if not user:
-        return jsonify({'message': 'User not found'}), 404
+        return jsonify({"message": "User not found"}), 404
     
-    # Return user information (excluding sensitive data like password)
-    user_data = {
-        'id': str(user.id),
-        'username': user.username,
-        'email': user.email,
-        'has_google_drive': user.google_credentials is not None
+    # Convert profile picture URL to full URL if it exists
+    profile_picture_url = None
+    if user.profile_picture_url:
+        if user.profile_picture_url.startswith('http'):
+            profile_picture_url = user.profile_picture_url
+        else:
+            profile_picture_url = request.url_root.rstrip('/') + user.profile_picture_url
+            
+    profile_data = {
+        "username": user.username,
+        "email": user.email,
+        "created_at": user.created_at.isoformat() if hasattr(user.created_at, 'isoformat') else str(user.created_at),
+        "profile_picture_url": profile_picture_url
     }
     
-    return jsonify(user_data), 200
+    return jsonify(profile_data), 200
+
+@user_bp.route('/settings', methods=['PUT'])
+@token_required
+def update_settings():
+    """Update user settings."""
+    user_id = request.user_id
+    
+    user = User.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    # Handle profile picture upload
+    if 'profile_picture' in request.files:
+        file = request.files['profile_picture']
+        if file and allowed_file(file.filename):
+            try:
+                # Create uploads directory if it doesn't exist
+                if not os.path.exists(app.config['UPLOAD_FOLDER']):
+                    os.makedirs(app.config['UPLOAD_FOLDER'])
+                    
+                # Save file and update user's profile picture URL
+                filename = secure_filename(file.filename)
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file.save(file_path)
+                user.profile_picture_url = f"/uploads/{filename}"
+            except Exception as e:
+                print(f"Error uploading profile picture: {str(e)}")  # Add logging
+                return jsonify({"message": "Error uploading profile picture"}), 500
+
+    # Update user information
+    if 'username' in request.form:
+        # Check if username is already taken
+        if User.get_user_by_username(request.form['username']) and request.form['username'] != user.username:
+            return jsonify({"message": "Username already taken"}), 400
+        user.username = request.form['username']
+
+    if 'email' in request.form:
+        # Check if email is already registered
+        if User.get_user_by_email(request.form['email']) and request.form['email'] != user.email:
+            return jsonify({"message": "Email already registered"}), 400
+        user.email = request.form['email']
+
+    # Handle password change
+    if 'new_password' in request.form:
+        if not 'current_password' in request.form:
+            return jsonify({"message": "Current password is required"}), 400
+            
+        if not user.check_password(request.form['current_password']):
+            return jsonify({"message": "Current password is incorrect"}), 400
+            
+        user.set_password(request.form['new_password'])
+
+    try:
+        user.save()
+        return jsonify({"message": "Settings updated successfully"}), 200
+    except Exception as e:
+        return jsonify({"message": "Error updating settings"}), 500
+
+def allowed_file(filename):
+    """Check if the file extension is allowed."""
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
