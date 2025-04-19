@@ -15,12 +15,16 @@ class User:
         self.password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         self.id = None
         self.google_credentials = google_credentials
+        self.created_at = datetime.utcnow()
+        self.profile_picture_url = None
 
     @classmethod
     def from_dict(cls, data):
         user = cls(data['username'], data['email'], data['password'], data.get('google_credentials'))
         user.id = str(data['_id'])
         user.password = data['password']
+        user.created_at = data.get('created_at', datetime.utcnow())
+        user.profile_picture_url = data.get('profile_picture_url')
         return user
 
     def save(self):
@@ -28,14 +32,26 @@ class User:
             "username": self.username,
             "email": self.email,
             "password": self.password,
-            "google_credentials": self.google_credentials
+            "google_credentials": self.google_credentials,
+            "created_at": self.created_at,
+            "profile_picture_url": self.profile_picture_url
         }
-        result = db.users.insert_one(user_data)
-        self.id = result.inserted_id
+        if self.id:
+            db.users.update_one(
+                {"_id": ObjectId(self.id)},
+                {"$set": user_data}
+            )
+        else:
+            result = db.users.insert_one(user_data)
+            self.id = result.inserted_id
 
     def update_google_credentials(self, google_credentials):
         self.google_credentials = google_credentials
         db.users.update_one({"_id": ObjectId(self.id)}, {"$set": {"google_credentials": google_credentials}})
+
+    def set_password(self, new_password):
+        """Set a new password for the user."""
+        self.password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
     def generate_token(self):
         payload = {
