@@ -15,12 +15,16 @@ class User:
         self.password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         self.id = None
         self.google_credentials = google_credentials
+        self.created_at = datetime.now()
+        self.updated_at = self.created_at
 
     @classmethod
     def from_dict(cls, data):
         user = cls(data['username'], data['email'], data['password'], data.get('google_credentials'))
         user.id = str(data['_id'])
         user.password = data['password']
+        user.created_at = data.get('created_at', datetime.now())
+        user.updated_at = data.get('updated_at', user.created_at)
         return user
 
     def save(self):
@@ -28,14 +32,44 @@ class User:
             "username": self.username,
             "email": self.email,
             "password": self.password,
-            "google_credentials": self.google_credentials
+            "google_credentials": self.google_credentials,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at
         }
         result = db.users.insert_one(user_data)
         self.id = result.inserted_id
 
     def update_google_credentials(self, google_credentials):
         self.google_credentials = google_credentials
-        db.users.update_one({"_id": ObjectId(self.id)}, {"$set": {"google_credentials": google_credentials}})
+        self.updated_at = datetime.now()
+        db.users.update_one({"_id": ObjectId(self.id)}, {"$set": {"google_credentials": google_credentials, "updated_at": self.updated_at}})
+
+    def update_password(self, new_password):
+        self.password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        self.updated_at = datetime.now()
+        db.users.update_one(
+            {"_id": ObjectId(self.id)}, 
+            {"$set": {"password": self.password, "updated_at": self.updated_at}}
+        )
+        return True
+
+    def update_profile(self, username=None, email=None):
+        update_data = {}
+        if username:
+            self.username = username
+            update_data["username"] = username
+        if email:
+            self.email = email
+            update_data["email"] = email
+        
+        if update_data:
+            self.updated_at = datetime.now()
+            update_data["updated_at"] = self.updated_at
+            db.users.update_one(
+                {"_id": ObjectId(self.id)}, 
+                {"$set": update_data}
+            )
+        return True
 
     def generate_token(self):
         payload = {
