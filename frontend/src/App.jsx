@@ -39,19 +39,9 @@ function App() {
           <Route path="reports" element={<PlagiarismReports />} />
           <Route path="reports/:reportId" element={<PlagiarismReport />} />
           <Route path="compare" element={<CompareDocuments />} />
+          <Route path="profile" element={<Profile />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
-        
-        {/* Profile and Settings routes */}
-        <Route path="/profile" element={
-          <ProtectedRoute>
-            <Profile />
-          </ProtectedRoute>
-        } />
-        <Route path="/settings" element={
-          <ProtectedRoute>
-            <Settings />
-          </ProtectedRoute>
-        } />
         
         <Route
           path="/login"
