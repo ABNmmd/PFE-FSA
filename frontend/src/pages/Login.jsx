@@ -68,20 +68,20 @@ function Login() {
               />
               <button
                 type="button"
-                className="absolute inset-y-0 right-0 px-3 flex items-center"
+                className="absolute inset-y-0 right-0 px-3 flex items-center cursor-pointer"
                 onClick={() => setShowPassword(!showPassword)}
               >
                 {showPassword ? (
-                  <FaEyeSlash className="h-4 w-4 text-gray-400" />
+                  <FaEyeSlash className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                 ) : (
-                  <FaEye className="h-4 w-4 text-gray-400" />
+                  <FaEye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                 )}
               </button>
             </div>
             {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
           </div>
           {errors.api && <p className="text-red-500 text-sm mt-1">{errors.api}</p>}
-          <button type="submit" className="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">Login</button>
+          <button type="submit" className="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer">Login</button>
         </form>
         <p className="mt-4 text-center text-sm text-gray-600">
           Don't have an account? <Link to="/register" className="text-blue-600 hover:underline">Sign up</Link>
