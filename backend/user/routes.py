@@ -156,7 +156,86 @@ def get_user_profile():
         'id': str(user.id),
         'username': user.username,
         'email': user.email,
-        'has_google_drive': user.google_credentials is not None
+        'has_google_drive': user.google_credentials is not None,
+        'created_at': user.created_at.strftime('%Y-%m-%d %H:%M:%S') if user.created_at else None,
+        'updated_at': user.updated_at.strftime('%Y-%m-%d %H:%M:%S') if user.updated_at else None
     }
     
     return jsonify(user_data), 200
+
+@user_bp.route('/change-password', methods=['POST'])
+@token_required
+def change_password():
+    user_id = request.user_id
+    user = User.get_user_by_id(user_id)
+    
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+    
+    data = request.get_json()
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+    
+    if not current_password or not new_password:
+        return jsonify({'message': 'Missing required fields'}), 400
+    
+    if not user.check_password(current_password):
+        return jsonify({'message': 'Current password is incorrect'}), 401
+    
+    # Update the password in the user model
+    user.update_password(new_password)
+    
+    return jsonify({
+        'message': 'Password updated successfully',
+        'user': {
+            'id': str(user.id),
+            'username': user.username,
+            'email': user.email,
+            'has_google_drive': user.google_credentials is not None,
+            'created_at': user.created_at.strftime('%Y-%m-%d %H:%M:%S') if user.created_at else None,
+            'updated_at': user.updated_at.strftime('%Y-%m-%d %H:%M:%S') if user.updated_at else None
+        }
+    }), 200
+
+@user_bp.route('/update-profile', methods=['POST'])
+@token_required
+def update_profile():
+    user_id = request.user_id
+    user = User.get_user_by_id(user_id)
+    
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+    
+    data = request.get_json()
+    username = data.get('username')
+    email = data.get('email')
+    
+    if not username and not email:
+        return jsonify({'message': 'No fields to update'}), 400
+    
+    # Check if username is already taken
+    if username and username != user.username:
+        existing_user = User.get_user_by_username(username)
+        if existing_user:
+            return jsonify({'message': 'Username already exists'}), 400
+    
+    # Check if email is already taken
+    if email and email != user.email:
+        existing_user = User.get_user_by_email(email)
+        if existing_user:
+            return jsonify({'message': 'Email already exists'}), 400
+    
+    # Update the profile
+    user.update_profile(username=username, email=email)
+    
+    return jsonify({
+        'message': 'Profile updated successfully',
+        'user': {
+            'id': str(user.id),
+            'username': user.username,
+            'email': user.email,
+            'has_google_drive': user.google_credentials is not None,
+            'created_at': user.created_at.strftime('%Y-%m-%d %H:%M:%S') if user.created_at else None,
+            'updated_at': user.updated_at.strftime('%Y-%m-%d %H:%M:%S') if user.updated_at else None
+        }
+    }), 200

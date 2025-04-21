@@ -9,6 +9,8 @@ import PlagiarismReport from './pages/PlagiarismReport';
 import PlagiarismReports from './pages/PlagiarismReports';
 import CompareDocuments from './pages/CompareDocuments';
 import DashboardLayout from './layouts/DashboardLayout';
+import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 import { useAuth } from './context/AuthContext';
 
 function App() {
@@ -37,6 +39,8 @@ function App() {
           <Route path="reports" element={<PlagiarismReports />} />
           <Route path="reports/:reportId" element={<PlagiarismReport />} />
           <Route path="compare" element={<CompareDocuments />} />
+          <Route path="profile" element={<Profile />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
         
         <Route
