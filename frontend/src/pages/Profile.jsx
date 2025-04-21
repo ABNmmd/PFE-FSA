@@ -22,13 +22,6 @@ function Profile() {
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
-        <div className="mb-6">
-          <Link to="/dashboard" className="flex items-center text-blue-600 hover:text-blue-800">
-            <FaArrowLeft className="mr-2" />
-            Back to Dashboard
-          </Link>
-        </div>
-        
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:px-6 border-b">
             <h2 className="text-2xl font-semibold text-gray-800">Profile</h2>
@@ -99,8 +92,8 @@ function Profile() {
 
             <div className="mt-8 flex justify-end">
               <Link 
-                to="/settings" 
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                to="/dashboard/settings" 
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 cursor-pointer"
               >
                 Update Profile Settings
               </Link>
