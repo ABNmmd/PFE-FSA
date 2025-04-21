@@ -21,7 +21,7 @@ function Settings() {
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const { user, connectGoogleDrive, connectedToDrive, token, fetchUserProfile } = useAuth();
+  const { user, connectGoogleDrive, connectedToDrive, updateProfile, updatePassword } = useAuth();
   const { showToast } = useToast();
 
   const handlePasswordChange = async (e) => {
@@ -48,19 +48,10 @@ function Settings() {
 
     setIsPasswordLoading(true);
     try {
-      const response = await api.post('/user/change-password', 
-        {
-          current_password: currentPassword,
-          new_password: newPassword
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      
-      if (response.data.user) {
-        await fetchUserProfile();
-      }
+      await updatePassword({
+        current_password: currentPassword,
+        new_password: newPassword
+      });
       
       showToast('Password updated successfully!', 'success');
       setCurrentPassword('');
@@ -92,17 +83,11 @@ function Settings() {
 
     setIsProfileLoading(true);
     try {
-      const response = await api.post('/user/update-profile',
-        {
-          username: username || undefined,
-          email: email || undefined
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      await updateProfile({
+        username: username || undefined,
+        email: email || undefined
+      });
 
-      await fetchUserProfile(); // Refresh user data
       showToast('Profile updated successfully!', 'success');
       setUsername('');
       setEmail('');
@@ -123,7 +108,7 @@ function Settings() {
     <div className="min-h-screen bg-gray-100 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
         <div className="mb-6">
-          <Link to="/profile" className="flex items-center text-blue-600 hover:text-blue-800">
+          <Link to="/dashboard/profile" className="flex items-center text-blue-600 hover:text-blue-800">
             <FaArrowLeft className="mr-2" />
             Back to Profile
           </Link>
@@ -191,7 +176,7 @@ function Settings() {
                 <button
                   type="submit"
                   disabled={isProfileLoading}
-                  className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                  className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white cursor-pointer ${
                     isProfileLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
                   } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
                 >
@@ -220,13 +205,13 @@ function Settings() {
                   />
                   <button
                     type="button"
-                    className="absolute inset-y-0 right-0 px-3 flex items-center"
+                    className="absolute inset-y-0 right-0 px-3 flex items-center cursor-pointer"
                     onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                   >
                     {showCurrentPassword ? (
-                      <FaEyeSlash className="h-4 w-4 text-gray-400" />
+                      <FaEyeSlash className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                     ) : (
-                      <FaEye className="h-4 w-4 text-gray-400" />
+                      <FaEye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                     )}
                   </button>
                 </div>
@@ -249,13 +234,13 @@ function Settings() {
                   />
                   <button
                     type="button"
-                    className="absolute inset-y-0 right-0 px-3 flex items-center"
+                    className="absolute inset-y-0 right-0 px-3 flex items-center cursor-pointer"
                     onClick={() => setShowNewPassword(!showNewPassword)}
                   >
                     {showNewPassword ? (
-                      <FaEyeSlash className="h-4 w-4 text-gray-400" />
+                      <FaEyeSlash className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                     ) : (
-                      <FaEye className="h-4 w-4 text-gray-400" />
+                      <FaEye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                     )}
                   </button>
                 </div>
@@ -278,13 +263,13 @@ function Settings() {
                   />
                   <button
                     type="button"
-                    className="absolute inset-y-0 right-0 px-3 flex items-center"
+                    className="absolute inset-y-0 right-0 px-3 flex items-center cursor-pointer"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
                     {showConfirmPassword ? (
-                      <FaEyeSlash className="h-4 w-4 text-gray-400" />
+                      <FaEyeSlash className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                     ) : (
-                      <FaEye className="h-4 w-4 text-gray-400" />
+                      <FaEye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                     )}
                   </button>
                 </div>
@@ -301,7 +286,7 @@ function Settings() {
                 <button
                   type="submit"
                   disabled={isPasswordLoading}
-                  className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                  className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white cursor-pointer ${
                     isPasswordLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
                   } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
                 >
@@ -331,7 +316,7 @@ function Settings() {
                 </div>
                 <button
                   onClick={handleGoogleDriveConnection}
-                  className={`ml-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium ${
+                  className={`ml-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium cursor-pointer ${
                     connectedToDrive
                       ? 'text-gray-700 bg-gray-100 hover:bg-gray-200'
                       : 'text-white bg-blue-600 hover:bg-blue-700'
