@@ -102,7 +102,34 @@ export const AuthProvider = ({ children }) => {
     window.location.href = googleOAuthURL;
   };
 
-  
+  const updateProfile = async (profileData) => {
+    try {
+      const response = await api.post('/user/update-profile', profileData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      await fetchUserProfile();
+      return response.data;
+    } catch (error) {
+      console.error('Update profile error:', error);
+      throw error;
+    }
+  };
+
+  const updatePassword = async (passwordData) => {
+    try {
+      const response = await api.post('/user/change-password', passwordData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.data.user) {
+        await fetchUserProfile();
+      }
+      return response.data;
+    } catch (error) {
+      console.error('Change password error:', error);
+      throw error;
+    }
+  };
+
   return (
     <AuthContext.Provider value={{ 
       token, 
@@ -117,7 +144,9 @@ export const AuthProvider = ({ children }) => {
       message, 
       setMessage,
       checkGoogleDriveConnection,
-      fetchUserProfile
+      fetchUserProfile,
+      updateProfile,
+      updatePassword
     }}>
       {children}
     </AuthContext.Provider>
