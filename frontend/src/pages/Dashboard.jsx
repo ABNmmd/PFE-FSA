@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MdDocumentScanner } from "react-icons/md";
 import { TbReportAnalytics } from "react-icons/tb";
 import DashboardNumbers from '../components/DashboardNumbers';
-import FilesManager from '../components/filesManager';
+import FilesManager from '../components/FilesManager';
 import { useAuth } from '../context/AuthContext';
 import { useDocuments } from '../context/DocumentContext';
 
