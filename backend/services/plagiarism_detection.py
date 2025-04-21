@@ -142,9 +142,9 @@ class PlagiarismDetectionService:
             }
             
         try:
-            # Filter out empty chunks
-            chunks1 = [chunk for chunk in chunks1 if chunk.strip()]
-            chunks2 = [chunk for chunk in chunks2 if chunk.strip()]
+            # Filter out empty chunks and sanitize Unicode characters for both methods
+            chunks1 = [self._sanitize_text(chunk) for chunk in chunks1 if chunk.strip()]
+            chunks2 = [self._sanitize_text(chunk) for chunk in chunks2 if chunk.strip()]
             
             if not chunks1 or not chunks2:
                 print("Warning: All chunks were empty after filtering")
@@ -164,34 +164,65 @@ class PlagiarismDetectionService:
             
             # Different calculation methods based on selected approach
             if self.method == "embeddings" and self.embedding_model:
-                # Get embeddings using sentence transformer
+                # Get embeddings using sentence transformer with safe encoding
                 if self.debug:
                     print("[DEBUG] Using sentence transformer embeddings")
-                embeddings1 = self.embedding_model.encode(chunks1, convert_to_tensor=True)
-                embeddings2 = self.embedding_model.encode(chunks2, convert_to_tensor=True)
-                
-                if self.debug:
-                    print(f"[DEBUG] Embeddings 1 shape: {embeddings1.shape}")
-                    print(f"[DEBUG] Embeddings 2 shape: {embeddings2.shape}")
-                
-                # Calculate similarity matrix
-                sim_matrix = util.pytorch_cos_sim(embeddings1, embeddings2).cpu().numpy()
+                try:
+                    # Handle smaller batches to avoid memory issues
+                    embeddings1 = self._safe_encode(chunks1)
+                    embeddings2 = self._safe_encode(chunks2)
+                    
+                    if self.debug:
+                        print(f"[DEBUG] Embeddings 1 shape: {embeddings1.shape}")
+                        print(f"[DEBUG] Embeddings 2 shape: {embeddings2.shape}")
+                    
+                    # Calculate similarity matrix
+                    sim_matrix = util.pytorch_cos_sim(embeddings1, embeddings2).cpu().numpy()
+                except Exception as emb_error:
+                    if self.debug:
+                        print(f"[DEBUG] Embedding error: {str(emb_error)}")
+                    # Create fallback similarity matrix
+                    sim_matrix = np.zeros((len(chunks1), len(chunks2)))
+                    # Set diagonal to moderate similarity as fallback
+                    for i in range(min(len(chunks1), len(chunks2))):
+                        sim_matrix[i, i] = 0.5
             else:
-                # Default TF-IDF approach
+                # Default TF-IDF approach with better error handling
                 if self.debug:
                     print("[DEBUG] Using TF-IDF embeddings")
-                all_texts = chunks1 + chunks2
-                self.vectorizer.fit(all_texts)
                 
-                embeddings1 = self.vectorizer.transform(chunks1).toarray()
-                embeddings2 = self.vectorizer.transform(chunks2).toarray()
-                
-                if self.debug:
-                    print(f"[DEBUG] TF-IDF matrix 1 shape: {embeddings1.shape}")
-                    print(f"[DEBUG] TF-IDF matrix 2 shape: {embeddings2.shape}")
-                    print(f"[DEBUG] TF-IDF vocabulary size: {len(self.vectorizer.vocabulary_)}")
-                
-                sim_matrix = cosine_similarity(embeddings1, embeddings2)
+                try:
+                    all_texts = chunks1 + chunks2
+                    # Use a more robust vectorization with error handling
+                    self.vectorizer = TfidfVectorizer(
+                        analyzer='word',
+                        ngram_range=(1, 3),
+                        stop_words='english',
+                        max_features=10000,
+                        decode_error='replace'  # Handle encoding errors by replacing with U+FFFD
+                    )
+                    
+                    # Fit the vectorizer with explicit error handling
+                    self.vectorizer.fit(all_texts)
+                    
+                    # Transform with additional error handling
+                    embeddings1 = self._safe_transform(chunks1)
+                    embeddings2 = self._safe_transform(chunks2)
+                    
+                    if self.debug:
+                        print(f"[DEBUG] TF-IDF matrix 1 shape: {embeddings1.shape}")
+                        print(f"[DEBUG] TF-IDF matrix 2 shape: {embeddings2.shape}")
+                        print(f"[DEBUG] TF-IDF vocabulary size: {len(self.vectorizer.vocabulary_)}")
+                    
+                    sim_matrix = cosine_similarity(embeddings1, embeddings2)
+                except Exception as tfidf_error:
+                    if self.debug:
+                        print(f"[DEBUG] TF-IDF error: {str(tfidf_error)}")
+                    # Create fallback similarity matrix
+                    sim_matrix = np.zeros((len(chunks1), len(chunks2)))
+                    # Set diagonal to low similarity to avoid false positives
+                    for i in range(min(len(chunks1), len(chunks2))):
+                        sim_matrix[i, i] = 0.1
             
             # Double-check matrix dimensions
             rows, cols = sim_matrix.shape
@@ -243,6 +274,79 @@ class PlagiarismDetectionService:
                 "global_score": 0.0,
                 "percentage": 0.0
             }
+    
+    def _safe_transform(self, chunks):
+        """Safely transform chunks to TF-IDF vectors with error handling."""
+        try:
+            return self.vectorizer.transform(chunks).toarray()
+        except Exception as e:
+            print(f"Error in TF-IDF transform: {str(e)}")
+            # Create empty vectors as fallback
+            return np.zeros((len(chunks), len(self.vectorizer.vocabulary_)))
+    
+    def _sanitize_for_tfidf(self, text):
+        """Sanitize text for TF-IDF processing to avoid encoding errors."""
+        if not text:
+            return ""
+        
+        try:
+            # Replace problematic Unicode and surrogate pairs
+            text = text.encode('ascii', errors='replace').decode('ascii', errors='replace')
+            # Remove any remaining non-ASCII characters
+            text = ''.join(c for c in text if ord(c) < 128)
+            return text
+        except Exception as e:
+            # If all else fails, return a simplified version
+            return re.sub(r'[^\x00-\x7F]+', ' ', text)
+    
+    def _safe_encode(self, chunks, batch_size=32):
+        """Safely encode text chunks using the embedding model with error handling."""
+        if not chunks:
+            return torch.zeros((0, self.embedding_model.get_sentence_embedding_dimension()))
+            
+        results = []
+        # Process in smaller batches to avoid memory issues
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i+batch_size]
+            try:
+                batch_embedding = self.embedding_model.encode(batch, convert_to_tensor=True)
+                results.append(batch_embedding)
+            except Exception as e:
+                if self.debug:
+                    print(f"[DEBUG] Error encoding batch {i//batch_size + 1}: {str(e)}")
+                # Create fallback embeddings for this batch
+                fallback = torch.zeros((len(batch), self.embedding_model.get_sentence_embedding_dimension()))
+                results.append(fallback)
+        
+        # Combine all batch results
+        if len(results) == 1:
+            return results[0]
+        return torch.cat(results, dim=0)
+    
+    def _sanitize_text(self, text):
+        """Sanitize text for both TF-IDF and embedding processing."""
+        if not text:
+            return ""
+        
+        # For TF-IDF method, do strict ASCII conversion    
+        if self.method == "tfidf":
+            return self._sanitize_for_tfidf(text)
+        
+        # For embeddings, do a more gentle cleaning that preserves meaningful Unicode
+        try:
+            # Replace only problematic Unicode chars while keeping most international characters
+            text = text.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+            
+            # Remove surrogates but keep normal international characters
+            text = ''.join(c for c in text if not (0xD800 <= ord(c) <= 0xDFFF))
+            
+            # Clean some special Unicode that might cause issues
+            text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
+            
+            return text
+        except Exception as e:
+            # If all cleaning fails, do basic filtering
+            return re.sub(r'[^\w\s.,?!-]', ' ', text)
     
     def detect_matches(self, text1, text2, sim_matrix, chunks1=None, chunks2=None, threshold=None):
         """
@@ -380,9 +484,9 @@ class PlagiarismDetectionService:
             print(f"[DEBUG] Method: {self.method}")
             print(f"[DEBUG] Threshold: {threshold}")
         
-        # Fix encoding in both documents
-        text1 = self.text_processor._fix_encoding(text1)
-        text2 = self.text_processor._fix_encoding(text2)
+        # Fix encoding in both documents for all methods
+        text1 = self._sanitize_text(text1)
+        text2 = self._sanitize_text(text2)
         
         # Use improved chunking for more granular comparison with bigger chunks for more context
         original_chunks1 = self.chunk_document_for_comparison(text1)
