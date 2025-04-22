@@ -10,6 +10,7 @@ import PlagiarismReports from './pages/PlagiarismReports';
 import CompareDocuments from './pages/CompareDocuments';
 import DashboardLayout from './layouts/DashboardLayout';
 import { useAuth } from './context/AuthContext';
+import GeneralPlagiarismCheck from './pages/GeneralPlagiarismCheck';
 
 function App() {
   const { token } = useAuth();
@@ -37,6 +38,7 @@ function App() {
           <Route path="reports" element={<PlagiarismReports />} />
           <Route path="reports/:reportId" element={<PlagiarismReport />} />
           <Route path="compare" element={<CompareDocuments />} />
+          <Route path="plagiarism" element={<GeneralPlagiarismCheck />} />
         </Route>
         
         <Route

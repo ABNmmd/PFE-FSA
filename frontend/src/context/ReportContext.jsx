@@ -15,6 +15,7 @@ export const ReportProvider = ({ children }) => {
     total: 0,
     pages: 0
   });
+  const [availableSources, setAvailableSources] = useState([]);
   
   const { token } = useAuth();
   const { showToast } = useToast();
@@ -169,6 +170,50 @@ export const ReportProvider = ({ children }) => {
     }
   };
 
+  // General plagiarism check methods
+  const checkDocumentPlagiarism = async (documentId, options = {}) => {
+    try {
+      const response = await api.post('/report/check', {
+        document_id: documentId,
+        sources: options.sources || ['user_documents', 'web'],
+        sensitivity: options.sensitivity || 'medium',
+        method: options.method || 'embeddings'
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error checking document plagiarism:', error);
+      throw error;
+    }
+  };
+  
+  const getCheckStatus = async (reportId) => {
+    try {
+      const response = await api.get(`/report/check/status/${reportId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error getting check status:', error);
+      throw error;
+    }
+  };
+  
+  const getAvailableSources = async () => {
+    try {
+      const response = await api.get('/report/sources', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setAvailableSources(response.data.sources);
+      return response.data.sources;
+    } catch (error) {
+      console.error('Error getting available sources:', error);
+      return [];
+    }
+  };
+
   return (
     <ReportContext.Provider value={{
       reports,
@@ -180,7 +225,11 @@ export const ReportProvider = ({ children }) => {
       compareDocuments,
       deleteReport,
       getDocumentReports,
-      changePage
+      changePage,
+      availableSources,
+      checkDocumentPlagiarism,
+      getCheckStatus,
+      getAvailableSources
     }}>
       {children}
     </ReportContext.Provider>

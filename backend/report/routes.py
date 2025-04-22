@@ -3,7 +3,8 @@ from user.routes import token_required
 from report.models import PlagiarismReport
 from documents.models import Document
 from user.models import User
-from services.plagiarism_detection import PlagiarismDetectionService, start_plagiarism_check_task
+from services.plagiarism_detection import PlagiarismDetectionService
+from services.plagiarism_coordinator import start_plagiarism_check_task, start_general_plagiarism_check
 from services.google_drive import GoogleDriveService
 from bson import ObjectId
 from datetime import datetime
@@ -232,3 +233,169 @@ def get_document_reports(doc_id):
     } for report in reports]
     
     return jsonify(reports_dict), 200
+
+@report_bp.route('/check', methods=['POST'])
+@token_required
+def check_document_plagiarism():
+    """
+    Check a single document for plagiarism against multiple sources.
+    Sources can include: user's documents, web content, etc.
+    """
+    user_id = request.user_id
+    
+    # Get document ID and check options
+    doc_id = request.json.get('document_id')
+    sources = request.json.get('sources', ['user_documents', 'web'])
+    sensitivity = request.json.get('sensitivity', 'medium')  # low, medium, high
+    
+    # Convert sensitivity to threshold
+    sensitivity_thresholds = {
+        'low': 0.80,      # Less sensitive - only catch very similar content
+        'medium': 0.70,   # Default sensitivity
+        'high': 0.60      # More sensitive - catch more potential matches
+    }
+    threshold = sensitivity_thresholds.get(sensitivity, 0.70)
+    
+    # Method selection based on sensitivity or explicitly provided
+    method = request.json.get('method', 'embeddings')
+    
+    if not doc_id:
+        return jsonify({"message": "Document ID is required"}), 400
+    
+    # Get document info
+    document = Document.get_document_by_file_id(doc_id)
+    if not document:
+        return jsonify({"message": "Document not found"}), 404
+    
+    # Check if user owns the document
+    if document.get('user_id') != str(user_id):
+        return jsonify({"message": "Access denied to document"}), 403
+    
+    try:
+        # Get user for Google credentials
+        user = User.get_user_by_id(user_id)
+        
+        if not user:
+            return jsonify({"message": "User not found"}), 404
+            
+        if not hasattr(user, 'google_credentials') or not user.google_credentials:
+            return jsonify({"message": "Google Drive not connected for this user"}), 400
+        
+        # Create a new general plagiarism check report
+        report = PlagiarismReport(
+            user_id=str(user_id),
+            document1={
+                "id": doc_id,
+                "name": document.get('file_name'),
+                "type": document.get('file_type', '')
+            },
+            status="pending",
+            detection_method=method,
+            report_type="general",  # Mark as a general check
+            check_options={
+                "sources": sources,
+                "sensitivity": sensitivity,
+                "threshold": threshold
+            }
+        )
+        
+        # Save the report to get an ID
+        report_id = report.save()
+        
+        # Start background processing
+        start_general_plagiarism_check(
+            str(user_id), 
+            doc_id, 
+            report_id, 
+            sources=sources,
+            threshold=threshold,
+            method=method
+        )
+        
+        # Return response with check ID
+        return jsonify({
+            "message": "Plagiarism check started",
+            "report_id": report_id,
+            "status": "pending",
+            "sources": sources
+        }), 202
+        
+    except Exception as e:
+        return jsonify({"message": f"Error starting plagiarism check: {str(e)}"}), 500
+
+@report_bp.route('/check/status/<report_id>', methods=['GET'])
+@token_required
+def check_plagiarism_status(report_id):
+    """Get the status of an ongoing plagiarism check."""
+    user_id = request.user_id
+    
+    try:
+        report = PlagiarismReport.get_by_id(report_id)
+        
+        if not report:
+            return jsonify({"message": "Report not found"}), 404
+            
+        if report.user_id != str(user_id):
+            return jsonify({"message": "Access denied"}), 403
+            
+        # Return the current status and any partial results
+        response = {
+            "status": report.status,
+            "progress": report.progress if hasattr(report, 'progress') else None,
+            "created_at": report.created_at.isoformat() if hasattr(report.created_at, 'isoformat') else str(report.created_at)
+        }
+        
+        # Include partial results if available
+        if report.status in ["processing", "completed"]:
+            response["partial_results"] = {
+                "sources_checked": report.sources_checked if hasattr(report, 'sources_checked') else [],
+                "similarity_score": report.similarity_score
+            }
+            
+        return jsonify(response), 200
+    
+    except Exception as e:
+        return jsonify({"message": f"Error checking status: {str(e)}"}), 500
+
+@report_bp.route('/sources', methods=['GET'])
+@token_required
+def get_available_sources():
+    """Get available plagiarism check sources for the current user."""
+    user_id = request.user_id
+    
+    # Base sources available to all users
+    sources = [
+        {
+            "id": "user_documents",
+            "name": "Your Documents",
+            "description": "Check against your own document library",
+            "enabled": True
+        },
+        {
+            "id": "web",
+            "name": "Web Content",
+            "description": "Check against web sources using Google Search API",
+            "enabled": True
+        }
+    ]
+    
+    # Check if academic database access is available
+    user = User.get_user_by_id(user_id)
+    academic_access = user and hasattr(user, 'academic_access') and user.academic_access
+    
+    if academic_access:
+        sources.append({
+            "id": "academic",
+            "name": "Academic Database",
+            "description": "Check against academic papers and journals",
+            "enabled": True
+        })
+    else:
+        sources.append({
+            "id": "academic",
+            "name": "Academic Database (Unavailable)",
+            "description": "Requires academic account access",
+            "enabled": False
+        })
+    
+    return jsonify({"sources": sources}), 200

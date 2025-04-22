@@ -72,7 +72,9 @@ function PlagiarismReport() {
         <Link to="/dashboard/reports" className="mr-4 text-blue-600 hover:text-blue-800">
           <FaArrowLeft className="text-xl" />
         </Link>
-        <h1 className="text-2xl font-bold">Plagiarism Report</h1>
+        <h1 className="text-2xl font-bold">
+          {report?.name || "Plagiarism Report"}
+        </h1>
       </div>
 
       {loading ? (
@@ -85,8 +87,11 @@ function PlagiarismReport() {
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <div>
+                {/* Use the report name as the heading */}
                 <h2 className="text-xl font-semibold">
-                  {report.document1?.name || "Document 1"} vs {report.document2?.name || "Document 2"}
+                  {report.name || (report.document1?.name && report.document2?.name 
+                    ? `${report.document1.name} vs ${report.document2.name}` 
+                    : "Plagiarism Report")}
                 </h2>
                 <p className="text-gray-600 text-sm mt-1">
                   Analyzed on {new Date(report.created_at).toLocaleString()}
@@ -190,16 +195,6 @@ function PlagiarismReport() {
                   'No matching content detected.'}
               </div>
             )}
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold mb-4">Recommendations</h3>
-            <ul className="list-disc pl-5 space-y-2 text-gray-700">
-              <li>Review the highlighted sections and consider rewording them</li>
-              <li>Add proper citations for any quoted content</li>
-              <li>Use quotation marks for direct quotes</li>
-              <li>Check bibliography for completeness</li>
-            </ul>
           </div>
         </>
       ) : (
