@@ -522,43 +522,75 @@ class PlagiarismDetectionService:
             }
         }
 
+    def get_chunks_and_vectors(self, text):
+        """
+        Compute and return chunks and their embeddings/vectors for the given text.
+        This is used to avoid recomputing them for every comparison.
+        """
+        chunks = self.chunk_document_for_comparison(text)
+        if self.method == "embeddings" and self.embedding_model:
+            vectors = self._safe_encode(chunks)
+        else:
+            self.vectorizer.fit(chunks)
+            vectors = self._safe_transform(chunks)
+        return chunks, vectors
+
     def check_against_user_documents(self, user_id, doc_id, text, report, threshold):
-        """Check document against user's other documents."""
+        """Check document against user's other documents, optimizing chunk/embedding reuse."""
         print(f"[DEBUG] Checking against user documents")
-        
+
+        # Compute chunks and vectors for the target document ONCE
+        target_chunks, target_vectors = self.get_chunks_and_vectors(text)
+
         documents = Document.get_documents_by_user_id(user_id)
         documents = [doc for doc in documents if doc.get('file_id') != doc_id]
-        
+
         if not documents:
-            # No other documents to compare with
             report.update_source_result("user_documents", {
                 "similarity_score": 0,
                 "matches_found": 0,
                 "matched_documents": []
             })
             return
-        
-        # Process each document sequentially
+
         matches_by_doc = []
         highest_similarity = 0
-        
+
         for doc in documents:
             try:
-                # Get document content
                 with GoogleDriveService(User.get_user_by_id(user_id).google_credentials) as drive_service:
                     file_content = drive_service.download_file(doc.get('file_id'))
                     file_content.seek(0)
                     compare_text = extract_text_content(file_content, doc.get('file_type', ''), debug=False)
-                
-                # Compare documents
-                results = self.compare_documents(text, compare_text, threshold=threshold)
-                similarity = results['similarity_scores']['percentage']
-                
+
+                # Compute chunks and vectors for the compared document
+                compare_chunks, compare_vectors = self.get_chunks_and_vectors(compare_text)
+
+                # Calculate similarity using precomputed vectors
+                if self.method == "embeddings" and self.embedding_model:
+                    sim_matrix = util.pytorch_cos_sim(target_vectors, compare_vectors).cpu().numpy()
+                else:
+                    sim_matrix = cosine_similarity(target_vectors, compare_vectors)
+
+                similarity_results = {
+                    "similarity_matrix": sim_matrix,
+                    "doc1_score": float(np.max(sim_matrix, axis=1).mean()) if sim_matrix.size > 0 else 0.0,
+                    "doc2_score": float(np.max(sim_matrix, axis=0).mean()) if sim_matrix.size > 0 else 0.0,
+                    "global_score": 0.0,
+                    "percentage": 0.0
+                }
+                similarity_results["global_score"] = (similarity_results["doc1_score"] + similarity_results["doc2_score"]) / 2
+                similarity_results["percentage"] = similarity_results["global_score"] * 100
+
+                similarity = similarity_results['percentage']
                 if similarity > highest_similarity:
                     highest_similarity = similarity
-                    
-                # If there are matches, add to results
-                if results['matches']:
+
+                matches = self.detect_matches(
+                    text, compare_text, sim_matrix, target_chunks, compare_chunks, threshold
+                )
+
+                if matches:
                     matches_by_doc.append({
                         "document": {
                             "id": doc.get('file_id'),
@@ -566,54 +598,60 @@ class PlagiarismDetectionService:
                             "type": doc.get('file_type', '')
                         },
                         "similarity": similarity,
-                        "match_count": len(results['matches']),
-                        "matches": results['matches'][:5]  # Limit to top 5 matches per document
+                        "match_count": len(matches),
+                        "matches": matches[:5]
                     })
             except Exception as e:
                 print(f"[DEBUG] Error comparing with document {doc.get('file_name')}: {str(e)}")
-        
-        # Update report with user documents results
+
         report.update_source_result("user_documents", {
             "similarity_score": highest_similarity,
             "matches_found": sum(doc["match_count"] for doc in matches_by_doc),
             "matched_documents": matches_by_doc
         })
-        
+
         print(f"[DEBUG] User documents check complete. Found {len(matches_by_doc)} documents with matches.")
-    
+
     def check_against_web_sources(self, text, report, threshold):
-        """Check document against web sources using Google Search."""
+        """Check document against web sources using Google Search, optimizing chunk/embedding reuse."""
         print(f"[DEBUG] Checking against web sources")
-        
-        # Extract key phrases from the document
-        chunks = self.chunk_document_for_comparison(text, max_chunk_size=500)
-        
-        # Limit to the most informative chunks
-        if len(chunks) > 5:
-            chunks = chunks[:5]  # Take top chunks
-        
-        # Search the web for each chunk
+
+        # Compute chunks and vectors for the target document ONCE
+        target_chunks, target_vectors = self.get_chunks_and_vectors(text)
+        if len(target_chunks) > 5:
+            target_chunks = target_chunks[:5]
+            if self.method == "embeddings" and self.embedding_model:
+                target_vectors = target_vectors[:5]
+            else:
+                target_vectors = target_vectors[:5]
+
         matches_by_url = {}
         highest_similarity = 0
-        
-        for chunk in chunks:
-            # Skip very short chunks
+
+        for idx, chunk in enumerate(target_chunks):
             if len(chunk) < 100:
                 continue
-                
+
             try:
-                # Search Google for this chunk
                 search_results = self._search_web_for_text(chunk)
-                
                 for result in search_results:
                     url = result.get('link')
                     title = result.get('title', '')
                     snippet = result.get('snippet', '')
-                    
-                    # Compare snippet to original chunk
-                    similarity = self._calculate_web_similarity(chunk, snippet)
-                    
-                    # Store the best match for each URL
+
+                    # Compute vector for the snippet
+                    snippet_chunks, snippet_vectors = self.get_chunks_and_vectors(snippet)
+                    if self.method == "embeddings" and self.embedding_model:
+                        sim_matrix = util.pytorch_cos_sim(
+                            target_vectors[idx:idx+1], snippet_vectors
+                        ).cpu().numpy()
+                    else:
+                        sim_matrix = cosine_similarity(
+                            target_vectors[idx:idx+1], snippet_vectors
+                        )
+
+                    similarity = float(np.max(sim_matrix)) if sim_matrix.size > 0 else 0.0
+
                     if url not in matches_by_url or similarity > matches_by_url[url]['similarity']:
                         matches_by_url[url] = {
                             "url": url,
@@ -625,79 +663,22 @@ class PlagiarismDetectionService:
                                 "similarity": similarity
                             }]
                         }
-                        
                         if similarity > highest_similarity:
                             highest_similarity = similarity
             except Exception as e:
                 print(f"[DEBUG] Error searching web for chunk: {str(e)}")
-        
-        # Update report with web sources results
+
         web_matches = list(matches_by_url.values())
         web_matches.sort(key=lambda x: x['similarity'], reverse=True)
-        
+
         report.update_source_result("web", {
             "similarity_score": highest_similarity,
             "matches_found": len(web_matches),
-            "matched_sources": web_matches[:10]  # Limit to top 10 sources
+            "matched_sources": web_matches[:10]
         })
-        
+
         print(f"[DEBUG] Web sources check complete. Found {len(web_matches)} sources with matches.")
-    
-    def _search_web_for_text(self, text, max_results=5):
-        """Search the web for text using Google Search API."""
-        try:
-            # Get API key from environment
-            api_key = os.getenv("GOOGLE_SEARCH_API_KEY")
-            cx = os.getenv("GOOGLE_SEARCH_CX")  # Custom search engine ID
-            
-            if not api_key or not cx:
-                print("[DEBUG] Google Search API key or CX not found")
-                return []
-            
-            # Prepare search query (limit to reasonable length)
-            if len(text) > 500:
-                text = text[:500]
-            
-            query = quote_plus(text)
-            url = f"https://www.googleapis.com/customsearch/v1?key={api_key}&cx={cx}&q={query}"
-            
-            response = requests.get(url)
-            
-            if response.status_code != 200:
-                print(f"[DEBUG] Google Search API error: {response.status_code}")
-                return []
-                
-            data = response.json()
-            return data.get('items', [])
-        
-        except Exception as e:
-            print(f"[DEBUG] Web search error: {str(e)}")
-            return []
-    
-    def _calculate_web_similarity(self, text1, text2):
-        """Calculate similarity between two text snippets."""
-        try:
-            # Use detector for consistent similarity calculation
-            results = self.compare_documents(text1, text2)
-            return results['similarity_scores']['percentage']
-        except Exception:
-            # Fallback to simpler comparison
-            return self._simple_similarity(text1, text2)
-    
-    def _simple_similarity(self, text1, text2):
-        """Simple fallback similarity calculation."""
-        # Normalize texts
-        t1 = text1.lower().strip()
-        t2 = text2.lower().strip()
-        
-        # Simple character-level similarity
-        if not t1 or not t2:
-            return 0
-        
-        # Character-level common character n-grams
-        common_chars = set(t1) & set(t2)
-        return len(common_chars) / max(len(set(t1)), len(set(t2)))
-    
+
     def check_against_academic_sources(self, text, report, threshold, user):
         """Check document against academic sources."""
         print(f"[DEBUG] Academic sources check not fully implemented")
@@ -792,6 +773,29 @@ class PlagiarismDetectionService:
             print(f"[DEBUG] Error processing comparison: {str(e)}")
             if report:
                 report.update_status("failed")
+
+    def _search_web_for_text(self, text, max_results=5):
+        """Search the web for text using Google Search API."""
+        try:
+            api_key = os.getenv("GOOGLE_SEARCH_API_KEY")
+            cx = os.getenv("GOOGLE_SEARCH_CX")  # Custom search engine ID
+            if not api_key or not cx:
+                print("[DEBUG] Google Search API key or CX not found")
+                return []
+            # Prepare search query (limit to reasonable length)
+            if len(text) > 500:
+                text = text[:500]
+            query = quote_plus(text)
+            url = f"https://www.googleapis.com/customsearch/v1?key={api_key}&cx={cx}&q={query}"
+            response = requests.get(url)
+            if response.status_code != 200:
+                print(f"[DEBUG] Google Search API error: {response.status_code}")
+                return []
+            data = response.json()
+            return data.get('items', [])
+        except Exception as e:
+            print(f"[DEBUG] Web search error: {str(e)}")
+            return []
 
 from services.plagiarism_coordinator import start_plagiarism_check_task, start_general_plagiarism_check
 
@@ -960,4 +964,3 @@ def process_general_plagiarism_check(user_id, doc_id, report_id, sources=None, t
         print(f"[DEBUG] ERROR in general plagiarism check: {str(e)}")
         if report:
             report.update_status("failed")
-
