@@ -38,7 +38,6 @@ function App() {
           <Route path="reports" element={<PlagiarismReports />} />
           <Route path="reports/:reportId" element={<PlagiarismReport />} />
           <Route path="compare" element={<CompareDocuments />} />
-          <Route path="plagiarism" element={<GeneralPlagiarismCheck />} />
         </Route>
         
         <Route
