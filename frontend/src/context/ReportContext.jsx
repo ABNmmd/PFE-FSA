@@ -15,6 +15,7 @@ export const ReportProvider = ({ children }) => {
     total: 0,
     pages: 0
   });
+  const [availableSources, setAvailableSources] = useState([]);
   
   const { token } = useAuth();
   const { showToast } = useToast();
@@ -34,9 +35,7 @@ export const ReportProvider = ({ children }) => {
     setError(null);
     
     try {
-      const response = await api.get(`/report/list?page=${pagination.page}&per_page=${pagination.perPage}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get(`/report/list?page=${pagination.page}&per_page=${pagination.perPage}`);
       
       setReports(response.data.reports);
       setPagination({
@@ -70,9 +69,7 @@ export const ReportProvider = ({ children }) => {
     setLoading(true);
     
     try {
-      const response = await api.get(`/report/${reportId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get(`/report/${reportId}`);
       return response.data;
     } catch (error) {
       console.error(`Failed to fetch report ${reportId}:`, error);
@@ -130,9 +127,7 @@ export const ReportProvider = ({ children }) => {
     if (!token) return false;
     
     try {
-      await api.delete(`/report/${reportId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await api.delete(`/report/${reportId}`);
       
       showToast('Report deleted successfully', 'success');
       await fetchReports(); // Refresh the reports list
@@ -150,9 +145,7 @@ export const ReportProvider = ({ children }) => {
     setLoading(true);
     
     try {
-      const response = await api.get(`/report/document/${documentId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get(`/report/document/${documentId}`);
       return response.data;
     } catch (error) {
       console.error(`Failed to fetch reports for document ${documentId}:`, error);
@@ -169,6 +162,44 @@ export const ReportProvider = ({ children }) => {
     }
   };
 
+  // General plagiarism check methods
+  const checkDocumentPlagiarism = async (documentId, options = {}) => {
+    try {
+      const response = await api.post('/report/check', {
+        document_id: documentId,
+        sources: options.sources || ['user_documents', 'web'],
+        sensitivity: options.sensitivity || 'medium',
+        method: options.method || 'embeddings'
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Error checking document plagiarism:', error);
+      throw error;
+    }
+  };
+  
+  const getCheckStatus = async (reportId) => {
+    try {
+      const response = await api.get(`/report/check/status/${reportId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting check status:', error);
+      throw error;
+    }
+  };
+  
+  const getAvailableSources = async () => {
+    try {
+      const response = await api.get('/report/sources');
+      setAvailableSources(response.data.sources);
+      return response.data.sources;
+    } catch (error) {
+      console.error('Error getting available sources:', error);
+      return [];
+    }
+  };
+
   return (
     <ReportContext.Provider value={{
       reports,
@@ -180,7 +211,11 @@ export const ReportProvider = ({ children }) => {
       compareDocuments,
       deleteReport,
       getDocumentReports,
-      changePage
+      changePage,
+      availableSources,
+      checkDocumentPlagiarism,
+      getCheckStatus,
+      getAvailableSources
     }}>
       {children}
     </ReportContext.Provider>

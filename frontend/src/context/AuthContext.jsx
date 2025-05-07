@@ -35,9 +35,7 @@ export const AuthProvider = ({ children }) => {
     if (!token) return null;
     
     try {
-      const response = await api.get('/user/profile', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/user/profile');
       setUser(response.data);
       return response.data;
     } catch (error) {
@@ -50,9 +48,7 @@ export const AuthProvider = ({ children }) => {
     if (!token) return;
     
     try {
-      const response = await api.get('/user/check-google-connection', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/user/check-google-connection');
       setConnectedToDrive(response.data.connected);
       return response.data.connected;
     } catch (error) {

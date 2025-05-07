@@ -25,9 +25,7 @@ export const DocumentProvider = ({ children }) => {
     setError(null);
     
     try {
-      const response = await api.get('/document/list', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await api.get('/document/list');
       setDocuments(response.data);
     } catch (error) {
       console.error('Failed to fetch documents:', error);
@@ -126,9 +124,7 @@ export const DocumentProvider = ({ children }) => {
 
     try {
       const response = await api.get(`/document/download/${fileId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
+      
         responseType: 'blob',
         onDownloadProgress: (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -168,20 +164,13 @@ export const DocumentProvider = ({ children }) => {
     try {
       // For text files, fetch content directly
       if (fileType === 'txt') {
-        const response = await api.get(`/document/content/${fileId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
+        const response = await api.get(`/document/content/${fileId}`);
         return response.data.content;
       }
       
       // For PDFs, get a data URL
       else if (fileType === 'pdf') {
         const response = await api.get(`/document/download/${fileId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          },
           responseType: 'blob'
         });
         

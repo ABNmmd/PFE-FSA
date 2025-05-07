@@ -12,6 +12,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import { useAuth } from './context/AuthContext';
+import GeneralPlagiarismCheck from './pages/GeneralPlagiarismCheck';
 
 function App() {
   const { token } = useAuth();

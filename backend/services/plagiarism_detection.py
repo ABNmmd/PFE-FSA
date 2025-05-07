@@ -1,18 +1,18 @@
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
-from services.text_processing import TextProcessingService
+from services.text_processing import TextProcessingService, extract_text_content
 from report.models import PlagiarismReport
 from documents.models import Document
 from user.models import User
 from services.google_drive import GoogleDriveService
-from services.text_processing import extract_text_content
-import threading
 import torch
 from sentence_transformers import SentenceTransformer, util
 import re
 import spacy
 import os
+import requests
+from urllib.parse import quote_plus
 
 # Load spaCy model - use the French model since you're working with French documents
 try:
@@ -26,50 +26,35 @@ except:
 model = SentenceTransformer('distiluse-base-multilingual-cased-v2')
 
 class PlagiarismDetectionService:
-    """Service for detecting plagiarism between documents using different algorithms."""
+    """Base service for detecting plagiarism between documents."""
     
     def __init__(self, method="embeddings", model_name=None, debug=False):
-        """
-        Initialize the plagiarism detection service.
-        
-        Args:
-            method: The detection method to use ('tfidf', 'embeddings')
-            model_name: The name of the embeddings model to use (only for 'embeddings' method)
-            debug: Whether to print debug information
-        """
+        """Initialize the plagiarism detection service."""
         self.text_processor = TextProcessingService(debug=debug)
         self.method = method.lower()
         self.debug = debug
-        
-        # Lower default threshold to catch more meaningful matches
-        self.default_threshold = 0.70  # Changed from 0.8 to 0.70
-        
-        # Minimum length for a chunk to be considered for matching
+        self.default_threshold = 0.70
         self.min_chunk_length = 30
-        
-        # Skip trivial matches (common headers, punctuation, etc.)
         self.skip_trivial = True
         self.trivial_matches = ['.', ':', ',', '-', 'introduction', 'conclusion']
         
         if self.debug:
             print(f"\n[DEBUG] INITIALIZING PLAGIARISM DETECTION SERVICE")
             print(f"[DEBUG] Method: {self.method}")
-            print(f"[DEBUG] Default threshold: {self.default_threshold}")
-        
-        # Initialize TF-IDF
+            
+        # Initialize TF-IDF vectorizer
         self.vectorizer = TfidfVectorizer(
             analyzer='word',
             ngram_range=(1, 3),
             stop_words='english',
-            max_features=10000
+            max_features=10000,
+            decode_error='replace'
         )
         
-        # Initialize embeddings model if needed
+        # Initialize embedding model
         self.embedding_model = None
-        
         if self.method == "embeddings":
             try:
-                # Default to a multilingual model if none specified
                 if not model_name:
                     model_name = "distiluse-base-multilingual-cased-v2"
                 print(f"Loading embedding model: {model_name}")
@@ -77,9 +62,8 @@ class PlagiarismDetectionService:
                 print("Embedding model loaded successfully")
             except Exception as e:
                 print(f"Error loading embedding model: {str(e)}")
-                print("Falling back to TF-IDF method")
                 self.method = "tfidf"
-    
+
     def get_embeddings(self, texts):
         """Generate embeddings for texts based on the selected method."""
         if self.method == "embeddings" and self.embedding_model:
@@ -472,8 +456,8 @@ class PlagiarismDetectionService:
                 
         return chunks
     
-    def compare_documents(self, text1, text2, chunk_size=100, overlap=50, threshold=None):
-        """Compare two documents for plagiarism with improved matching."""
+    def compare_documents(self, text1, text2, threshold=None):
+        """Compare two documents for plagiarism."""
         if threshold is None:
             threshold = self.default_threshold
             
@@ -537,6 +521,283 @@ class PlagiarismDetectionService:
                 "method": self.method
             }
         }
+
+    def get_chunks_and_vectors(self, text):
+        """
+        Compute and return chunks and their embeddings/vectors for the given text.
+        This is used to avoid recomputing them for every comparison.
+        """
+        chunks = self.chunk_document_for_comparison(text)
+        if self.method == "embeddings" and self.embedding_model:
+            vectors = self._safe_encode(chunks)
+        else:
+            self.vectorizer.fit(chunks)
+            vectors = self._safe_transform(chunks)
+        return chunks, vectors
+
+    def check_against_user_documents(self, user_id, doc_id, text, report, threshold):
+        """Check document against user's other documents, optimizing chunk/embedding reuse."""
+        print(f"[DEBUG] Checking against user documents")
+
+        # Compute chunks and vectors for the target document ONCE
+        target_chunks, target_vectors = self.get_chunks_and_vectors(text)
+
+        documents = Document.get_documents_by_user_id(user_id)
+        documents = [doc for doc in documents if doc.get('file_id') != doc_id]
+
+        if not documents:
+            report.update_source_result("user_documents", {
+                "similarity_score": 0,
+                "matches_found": 0,
+                "matched_documents": []
+            })
+            return
+
+        matches_by_doc = []
+        highest_similarity = 0
+
+        for doc in documents:
+            try:
+                with GoogleDriveService(User.get_user_by_id(user_id).google_credentials) as drive_service:
+                    file_content = drive_service.download_file(doc.get('file_id'))
+                    file_content.seek(0)
+                    compare_text = extract_text_content(file_content, doc.get('file_type', ''), debug=False)
+
+                # Compute chunks and vectors for the compared document
+                compare_chunks, compare_vectors = self.get_chunks_and_vectors(compare_text)
+
+                # Calculate similarity using precomputed vectors
+                if self.method == "embeddings" and self.embedding_model:
+                    sim_matrix = util.pytorch_cos_sim(target_vectors, compare_vectors).cpu().numpy()
+                else:
+                    sim_matrix = cosine_similarity(target_vectors, compare_vectors)
+
+                similarity_results = {
+                    "similarity_matrix": sim_matrix,
+                    "doc1_score": float(np.max(sim_matrix, axis=1).mean()) if sim_matrix.size > 0 else 0.0,
+                    "doc2_score": float(np.max(sim_matrix, axis=0).mean()) if sim_matrix.size > 0 else 0.0,
+                    "global_score": 0.0,
+                    "percentage": 0.0
+                }
+                similarity_results["global_score"] = (similarity_results["doc1_score"] + similarity_results["doc2_score"]) / 2
+                similarity_results["percentage"] = similarity_results["global_score"] * 100
+
+                similarity = similarity_results['percentage']
+                if similarity > highest_similarity:
+                    highest_similarity = similarity
+
+                matches = self.detect_matches(
+                    text, compare_text, sim_matrix, target_chunks, compare_chunks, threshold
+                )
+
+                if matches:
+                    matches_by_doc.append({
+                        "document": {
+                            "id": doc.get('file_id'),
+                            "name": doc.get('file_name'),
+                            "type": doc.get('file_type', '')
+                        },
+                        "similarity": similarity,
+                        "match_count": len(matches),
+                        "matches": matches[:5]
+                    })
+            except Exception as e:
+                print(f"[DEBUG] Error comparing with document {doc.get('file_name')}: {str(e)}")
+
+        report.update_source_result("user_documents", {
+            "similarity_score": highest_similarity,
+            "matches_found": sum(doc["match_count"] for doc in matches_by_doc),
+            "matched_documents": matches_by_doc
+        })
+
+        print(f"[DEBUG] User documents check complete. Found {len(matches_by_doc)} documents with matches.")
+
+    def check_against_web_sources(self, text, report, threshold):
+        """Check document against web sources using Google Search, optimizing chunk/embedding reuse."""
+        print(f"[DEBUG] Checking against web sources")
+
+        # Compute chunks and vectors for the target document ONCE
+        target_chunks, target_vectors = self.get_chunks_and_vectors(text)
+        if len(target_chunks) > 5:
+            target_chunks = target_chunks[:5]
+            if self.method == "embeddings" and self.embedding_model:
+                target_vectors = target_vectors[:5]
+            else:
+                target_vectors = target_vectors[:5]
+
+        matches_by_url = {}
+        highest_similarity = 0
+
+        for idx, chunk in enumerate(target_chunks):
+            if len(chunk) < 100:
+                continue
+
+            try:
+                search_results = self._search_web_for_text(chunk)
+                for result in search_results:
+                    url = result.get('link')
+                    title = result.get('title', '')
+                    snippet = result.get('snippet', '')
+
+                    # Compute vector for the snippet
+                    snippet_chunks, snippet_vectors = self.get_chunks_and_vectors(snippet)
+                    if self.method == "embeddings" and self.embedding_model:
+                        sim_matrix = util.pytorch_cos_sim(
+                            target_vectors[idx:idx+1], snippet_vectors
+                        ).cpu().numpy()
+                    else:
+                        sim_matrix = cosine_similarity(
+                            target_vectors[idx:idx+1], snippet_vectors
+                        )
+
+                    similarity = float(np.max(sim_matrix)) if sim_matrix.size > 0 else 0.0
+
+                    if url not in matches_by_url or similarity > matches_by_url[url]['similarity']:
+                        matches_by_url[url] = {
+                            "url": url,
+                            "title": title,
+                            "similarity": similarity,
+                            "matches": [{
+                                "text1": chunk,
+                                "text2": snippet,
+                                "similarity": similarity
+                            }]
+                        }
+                        if similarity > highest_similarity:
+                            highest_similarity = similarity
+            except Exception as e:
+                print(f"[DEBUG] Error searching web for chunk: {str(e)}")
+
+        web_matches = list(matches_by_url.values())
+        web_matches.sort(key=lambda x: x['similarity'], reverse=True)
+
+        report.update_source_result("web", {
+            "similarity_score": highest_similarity,
+            "matches_found": len(web_matches),
+            "matched_sources": web_matches[:10]
+        })
+
+        print(f"[DEBUG] Web sources check complete. Found {len(web_matches)} sources with matches.")
+
+    def check_against_academic_sources(self, text, report, threshold, user):
+        """Check document against academic sources."""
+        print(f"[DEBUG] Academic sources check not fully implemented")
+        
+        # Placeholder implementation
+        report.update_source_result("academic", {
+            "similarity_score": 0,
+            "matches_found": 0,
+            "matched_sources": []
+        })
+    
+    def process_document_check(self, user_id, doc_id, report, threshold, sources=None, method="embeddings"):
+        """Core processing function for checking a document against sources."""
+        try:
+            # Get user
+            user = User.get_user_by_id(user_id)
+            if not user or not user.google_credentials:
+                report.update_status("failed")
+                print("[DEBUG] User not found or no Google credentials")
+                return
+            
+            # Get document
+            document = Document.get_document_by_file_id(doc_id)
+            if not document:
+                report.update_status("failed")
+                print("[DEBUG] Document not found")
+                return
+            
+            # Download and extract document text
+            with GoogleDriveService(user.google_credentials) as drive_service:
+                file_content = drive_service.download_file(doc_id)
+                file_content.seek(0)
+                text = extract_text_content(file_content, document.get('file_type', ''), debug=True)
+            
+            print(f"[DEBUG] Extracted {len(text)} characters from document")
+            
+            # Check against each source
+            if "user_documents" in sources:
+                self.check_against_user_documents(user_id, doc_id, text, report, threshold)
+                
+            if "web" in sources:
+                self.check_against_web_sources(text, report, threshold)
+                
+            if "academic" in sources and hasattr(user, 'academic_access') and user.academic_access:
+                self.check_against_academic_sources(text, report, threshold, user)
+        
+        except Exception as e:
+            print(f"[DEBUG] Error processing document check: {str(e)}")
+            if report:
+                report.update_status("failed")
+    
+    def process_comparison(self, user_id, doc1_id, doc2_id, report):
+        """Core processing function for direct document comparison."""
+        try:
+            # Get user
+            user = User.get_user_by_id(user_id)
+            if not user or not user.google_credentials:
+                report.update_status("failed")
+                return
+            
+            # Get document IDs from report
+            doc1_id = report.document1["id"]
+            doc2_id = report.document2["id"]
+            
+            # Get documents
+            doc1 = Document.get_document_by_file_id(doc1_id)
+            doc2 = Document.get_document_by_file_id(doc2_id)
+            if not doc1 or not doc2:
+                report.update_status("failed")
+                return
+            
+            # Download document content
+            with GoogleDriveService(user.google_credentials) as drive_service:
+                file1_content = drive_service.download_file(doc1_id)
+                file2_content = drive_service.download_file(doc2_id)
+                
+                # Reset file pointers
+                file1_content.seek(0)
+                file2_content.seek(0)
+                
+                # Extract text
+                text1 = extract_text_content(file1_content, doc1.get('file_type', ''), debug=True)
+                text2 = extract_text_content(file2_content, doc2.get('file_type', ''), debug=True)
+            
+            # Compare documents
+            results = self.compare_documents(text1, text2, threshold=0.70)
+            
+            # Update report with results
+            report.update_results(results)
+            
+        except Exception as e:
+            print(f"[DEBUG] Error processing comparison: {str(e)}")
+            if report:
+                report.update_status("failed")
+
+    def _search_web_for_text(self, text, max_results=5):
+        """Search the web for text using Google Search API."""
+        try:
+            api_key = os.getenv("GOOGLE_SEARCH_API_KEY")
+            cx = os.getenv("GOOGLE_SEARCH_CX")  # Custom search engine ID
+            if not api_key or not cx:
+                print("[DEBUG] Google Search API key or CX not found")
+                return []
+            # Prepare search query (limit to reasonable length)
+            if len(text) > 500:
+                text = text[:500]
+            query = quote_plus(text)
+            url = f"https://www.googleapis.com/customsearch/v1?key={api_key}&cx={cx}&q={query}"
+            response = requests.get(url)
+            if response.status_code != 200:
+                print(f"[DEBUG] Google Search API error: {response.status_code}")
+                return []
+            data = response.json()
+            return data.get('items', [])
+        except Exception as e:
+            print(f"[DEBUG] Web search error: {str(e)}")
+            return []
+
+from services.plagiarism_coordinator import start_plagiarism_check_task, start_general_plagiarism_check
 
 def process_plagiarism_check(user_id, doc1_id, doc2_id, report_id, method="embeddings", debug=True):
     """Background job to process plagiarism detection with debug output."""
@@ -624,3 +885,82 @@ def start_plagiarism_check_task(user_id, doc1_id, doc2_id, report_id, method="em
     thread.start()
     return thread
 
+def start_general_plagiarism_check(user_id, doc_id, report_id, sources=None, threshold=0.70, method="embeddings"):
+    """Start a general plagiarism check for a document against multiple sources."""
+    thread = threading.Thread(
+        target=process_general_plagiarism_check,
+        args=(str(user_id), doc_id, report_id, sources, threshold, method)
+    )
+    thread.daemon = True
+    thread.start()
+    return thread
+
+def process_general_plagiarism_check(user_id, doc_id, report_id, sources=None, threshold=0.70, method="embeddings"):
+    """Process a general plagiarism check against multiple sources."""
+    try:
+        print(f"\n[DEBUG] STARTING GENERAL PLAGIARISM CHECK")
+        print(f"[DEBUG] User ID: {user_id}")
+        print(f"[DEBUG] Document ID: {doc_id}")
+        print(f"[DEBUG] Report ID: {report_id}")
+        print(f"[DEBUG] Sources: {sources}")
+        print(f"[DEBUG] Threshold: {threshold}")
+        print(f"[DEBUG] Method: {method}")
+        
+        if not sources:
+            sources = ["user_documents", "web"]
+        
+        # Get report
+        report = PlagiarismReport.get_by_id(report_id)
+        if not report:
+            print("[DEBUG] Report not found")
+            return
+        
+        # Update status to processing
+        report.update_status("processing")
+        
+        # Get user
+        user = User.get_user_by_id(user_id)
+        if not user or not user.google_credentials:
+            report.update_status("failed")
+            print("[DEBUG] User not found or no Google credentials")
+            return
+        
+        # Get document content
+        document = Document.get_document_by_file_id(doc_id)
+        if not document:
+            report.update_status("failed")
+            print("[DEBUG] Document not found")
+            return
+        
+        # Download and extract text from the document
+        with GoogleDriveService(user.google_credentials) as drive_service:
+            file_content = drive_service.download_file(doc_id)
+            file_content.seek(0)
+            text = extract_text_content(file_content, document.get('file_type', ''), debug=True)
+        
+        print(f"[DEBUG] Extracted {len(text)} characters from document")
+        
+        # Initialize plagiarism detection service
+        detector = PlagiarismDetectionService(method=method, debug=True)
+        
+        # Check against each source sequentially
+        if "user_documents" in sources:
+            detector.check_against_user_documents(user_id, doc_id, text, report, threshold)
+            
+        if "web" in sources:
+            detector.check_against_web_sources(text, report, threshold)
+            
+        if "academic" in sources and hasattr(user, 'academic_access') and user.academic_access:
+            detector.check_against_academic_sources(text, report, threshold, user)
+        
+        # Final update once all sources have been checked
+        if report.status != "completed":
+            report.status = "completed"
+            report.save()
+            
+        print(f"[DEBUG] GENERAL PLAGIARISM CHECK COMPLETED")
+        
+    except Exception as e:
+        print(f"[DEBUG] ERROR in general plagiarism check: {str(e)}")
+        if report:
+            report.update_status("failed")

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { FaEye, FaDownload, FaTrashAlt, FaFileAlt } from 'react-icons/fa';
+import { FaEye, FaDownload, FaTrashAlt, FaFileAlt, FaExchangeAlt, FaSearch } from 'react-icons/fa';
 
 function ReportCard({ report, onDelete, onDownload }) {
   // Format date
@@ -30,6 +30,45 @@ function ReportCard({ report, onDelete, onDownload }) {
     }
   };
 
+  // Get icon and color for report type
+  const getReportTypeInfo = (reportType) => {
+    if (reportType === 'general') {
+      return {
+        icon: <FaSearch className="mr-1" />,
+        label: 'General Check',
+        bgColor: 'bg-green-100',
+        textColor: 'text-green-800'
+      };
+    } else {
+      return {
+        icon: <FaExchangeAlt className="mr-1" />,
+        label: 'Comparison',
+        bgColor: 'bg-blue-100',
+        textColor: 'text-blue-800'
+      };
+    }
+  };
+
+  // Get method display text and style
+  const getMethodInfo = (method) => {
+    if (method === 'embeddings') {
+      return {
+        label: 'AI Embeddings',
+        bgColor: 'bg-purple-100',
+        textColor: 'text-purple-800'
+      };
+    } else {
+      return {
+        label: 'TF-IDF',
+        bgColor: 'bg-indigo-100',
+        textColor: 'text-indigo-800'
+      };
+    }
+  };
+
+  const typeInfo = getReportTypeInfo(report.report_type);
+  const methodInfo = getMethodInfo(report.detection_method);
+
   return (
     <div className="bg-white shadow rounded-lg p-4 hover:shadow-md transition-shadow">
       <div className="flex justify-between items-start">
@@ -39,19 +78,36 @@ function ReportCard({ report, onDelete, onDownload }) {
           </div>
           <div>
             <h3 className="font-medium text-gray-900">
-              {report.document1?.name || "Document 1"} vs {report.document2?.name || "Document 2"}
+              {report.name || "Unnamed Report"}
             </h3>
             <p className="text-sm text-gray-500">{formatDate(report.created_at)}</p>
+            
+            {/* Report Type and Method Badges */}
+            <div className="flex flex-wrap items-center gap-2 mt-1.5 mb-1.5">
+              <span className={`flex items-center px-2 py-1 text-xs font-medium rounded-full ${typeInfo.bgColor} ${typeInfo.textColor}`}>
+                {typeInfo.icon} {typeInfo.label}
+              </span>
+              
+              {report.detection_method && (
+                <span className={`px-2 py-1 text-xs font-medium rounded-full ${methodInfo.bgColor} ${methodInfo.textColor}`}>
+                  {methodInfo.label}
+                </span>
+              )}
+            </div>
+            
+            {/* Document Info */}
+            {report.report_type === 'comparison' && report.document1 && report.document2 && (
+              <p className="text-xs text-gray-600 mb-1.5">
+                {report.document1.name} vs {report.document2.name}
+              </p>
+            )}
+            
+            {/* Status and Score */}
             <div className="flex items-center mt-1">
               {getStatusBadge(report.status)}
               {report.status === 'completed' && (
                 <span className={`ml-2 font-medium ${getScoreColor(report.similarity_score)}`}>
                   {(report.similarity_score || 0).toFixed(2)}% Match
-                </span>
-              )}
-              {report.detection_method && (
-                <span className="ml-2 text-xs text-gray-500">
-                  Method: {report.detection_method.toUpperCase()}
                 </span>
               )}
             </div>
