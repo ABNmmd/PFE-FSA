@@ -118,11 +118,16 @@ def get_reports():
     
     reports_dict = [{
         "id": report.id,
+        "name": getattr(report, "name", None),
         "document1": report.document1,
-        "document2": report.document2,
+        "document2": getattr(report, "document2", None),
         "similarity_score": report.similarity_score,
         "created_at": report.created_at.isoformat() if hasattr(report.created_at, 'isoformat') else report.created_at,
-        "status": report.status
+        "status": report.status,
+        "detection_method": getattr(report, "detection_method", None),
+        "report_type": getattr(report, "report_type", None),
+        "sources_checked": getattr(report, "sources_checked", []),
+        "progress": getattr(report, "progress", None)
     } for report in reports]
     
     # Return paginated response

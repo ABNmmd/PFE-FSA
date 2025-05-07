@@ -42,11 +42,12 @@ class PlagiarismDetectionService:
             print(f"\n[DEBUG] INITIALIZING PLAGIARISM DETECTION SERVICE")
             print(f"[DEBUG] Method: {self.method}")
             
-        # Initialize TF-IDF vectorizer
+        # Initialize TF-IDF vectorizer for French only
+        self.french_stopwords = list(nlp.Defaults.stop_words)
         self.vectorizer = TfidfVectorizer(
             analyzer='word',
             ngram_range=(1, 3),
-            stop_words='english',
+            stop_words=self.french_stopwords,  # French stopwords only
             max_features=10000,
             decode_error='replace'
         )
@@ -171,17 +172,15 @@ class PlagiarismDetectionService:
                     for i in range(min(len(chunks1), len(chunks2))):
                         sim_matrix[i, i] = 0.5
             else:
-                # Default TF-IDF approach with better error handling
                 if self.debug:
                     print("[DEBUG] Using TF-IDF embeddings")
                 
                 try:
                     all_texts = chunks1 + chunks2
-                    # Use a more robust vectorization with error handling
                     self.vectorizer = TfidfVectorizer(
                         analyzer='word',
                         ngram_range=(1, 3),
-                        stop_words='english',
+                        stop_words=self.french_stopwords,  # French stopwords only
                         max_features=10000,
                         decode_error='replace'  # Handle encoding errors by replacing with U+FFFD
                     )
@@ -798,169 +797,3 @@ class PlagiarismDetectionService:
             return []
 
 from services.plagiarism_coordinator import start_plagiarism_check_task, start_general_plagiarism_check
-
-def process_plagiarism_check(user_id, doc1_id, doc2_id, report_id, method="embeddings", debug=True):
-    """Background job to process plagiarism detection with debug output."""
-    try:
-        print(f"\n[DEBUG] STARTING PLAGIARISM CHECK")
-        print(f"[DEBUG] User ID: {user_id}")
-        print(f"[DEBUG] Doc1 ID: {doc1_id}")
-        print(f"[DEBUG] Doc2 ID: {doc2_id}")
-        print(f"[DEBUG] Report ID: {report_id}")
-        print(f"[DEBUG] Method: {method}")
-        
-        # Get report
-        report = PlagiarismReport.get_by_id(report_id)
-        if not report:
-            return
-        
-        # Update status to processing
-        report.update_status("processing")
-        print("[DEBUG] Report status updated to 'processing'")
-        
-        # Get user 
-        user = User.get_user_by_id(user_id)
-        if not user or not user.google_credentials:
-            report.update_status("failed")
-            return
-        
-        doc1_id = report.document1["id"]
-        doc2_id = report.document2["id"]
-        
-        doc1 = Document.get_document_by_file_id(doc1_id)
-        doc2 = Document.get_document_by_file_id(doc2_id)
-        
-        if not doc1 or not doc2:
-            report.update_status("failed")
-            return
-        
-        # Download document content
-        with GoogleDriveService(user.google_credentials) as drive_service:
-            file1_content = drive_service.download_file(doc1_id)
-            file2_content = drive_service.download_file(doc2_id)
-            
-            # Reset file pointers
-            file1_content.seek(0)
-            file2_content.seek(0)
-            
-            # Extract text
-            text1 = extract_text_content(file1_content, doc1.get('file_type', ''), debug=debug)
-            text2 = extract_text_content(file2_content, doc2.get('file_type', ''), debug=debug)
-        
-        print(f"\n[DEBUG] TEXT EXTRACTION COMPLETE")
-        print(f"[DEBUG] Document 1 ({doc1.get('file_name', 'Unknown')}): {len(text1)} characters")
-        print(f"[DEBUG] Document 2 ({doc2.get('file_name', 'Unknown')}): {len(text2)} characters")
-        
-        # First 100 characters of each document
-        print(f"[DEBUG] Document 1 sample: {text1[:100]}..." if text1 and len(text1) > 100 else f"[DEBUG] Document 1 sample: {text1}")
-        print(f"[DEBUG] Document 2 sample: {text2[:100]}..." if text2 and len(text2) > 100 else f"[DEBUG] Document 2 sample: {text2}")
-        
-        # Initialize plagiarism detection service with the specified method
-        detector = PlagiarismDetectionService(method=method, debug=debug)
-        
-        # Use lower threshold to catch more meaningful matches
-        results = detector.compare_documents(text1, text2, threshold=0.70)
-        
-        print(f"\n[DEBUG] PLAGIARISM CHECK COMPLETE")
-        print(f"[DEBUG] Similarity score: {results['similarity_scores']['percentage']:.2f}%")
-        print(f"[DEBUG] Matched chunks: {len(results['matches'])}")
-        
-        # Update report with results
-        report.update_results(results)
-        print("[DEBUG] Results saved to database")
-        
-    except Exception as e:
-        # Update report status to failed
-        if report:
-            report.update_status("failed")
-        print(f"[DEBUG] ERROR in plagiarism check: {str(e)}")
-
-def start_plagiarism_check_task(user_id, doc1_id, doc2_id, report_id, method="embeddings"):
-    """Starts the plagiarism check in a background thread."""
-    thread = threading.Thread(
-        target=process_plagiarism_check,
-        args=(str(user_id), doc1_id, doc2_id, report_id, method, True)  # Added debug=True
-    )
-    thread.daemon = True  # Thread will exit when main program exits
-    thread.start()
-    return thread
-
-def start_general_plagiarism_check(user_id, doc_id, report_id, sources=None, threshold=0.70, method="embeddings"):
-    """Start a general plagiarism check for a document against multiple sources."""
-    thread = threading.Thread(
-        target=process_general_plagiarism_check,
-        args=(str(user_id), doc_id, report_id, sources, threshold, method)
-    )
-    thread.daemon = True
-    thread.start()
-    return thread
-
-def process_general_plagiarism_check(user_id, doc_id, report_id, sources=None, threshold=0.70, method="embeddings"):
-    """Process a general plagiarism check against multiple sources."""
-    try:
-        print(f"\n[DEBUG] STARTING GENERAL PLAGIARISM CHECK")
-        print(f"[DEBUG] User ID: {user_id}")
-        print(f"[DEBUG] Document ID: {doc_id}")
-        print(f"[DEBUG] Report ID: {report_id}")
-        print(f"[DEBUG] Sources: {sources}")
-        print(f"[DEBUG] Threshold: {threshold}")
-        print(f"[DEBUG] Method: {method}")
-        
-        if not sources:
-            sources = ["user_documents", "web"]
-        
-        # Get report
-        report = PlagiarismReport.get_by_id(report_id)
-        if not report:
-            print("[DEBUG] Report not found")
-            return
-        
-        # Update status to processing
-        report.update_status("processing")
-        
-        # Get user
-        user = User.get_user_by_id(user_id)
-        if not user or not user.google_credentials:
-            report.update_status("failed")
-            print("[DEBUG] User not found or no Google credentials")
-            return
-        
-        # Get document content
-        document = Document.get_document_by_file_id(doc_id)
-        if not document:
-            report.update_status("failed")
-            print("[DEBUG] Document not found")
-            return
-        
-        # Download and extract text from the document
-        with GoogleDriveService(user.google_credentials) as drive_service:
-            file_content = drive_service.download_file(doc_id)
-            file_content.seek(0)
-            text = extract_text_content(file_content, document.get('file_type', ''), debug=True)
-        
-        print(f"[DEBUG] Extracted {len(text)} characters from document")
-        
-        # Initialize plagiarism detection service
-        detector = PlagiarismDetectionService(method=method, debug=True)
-        
-        # Check against each source sequentially
-        if "user_documents" in sources:
-            detector.check_against_user_documents(user_id, doc_id, text, report, threshold)
-            
-        if "web" in sources:
-            detector.check_against_web_sources(text, report, threshold)
-            
-        if "academic" in sources and hasattr(user, 'academic_access') and user.academic_access:
-            detector.check_against_academic_sources(text, report, threshold, user)
-        
-        # Final update once all sources have been checked
-        if report.status != "completed":
-            report.status = "completed"
-            report.save()
-            
-        print(f"[DEBUG] GENERAL PLAGIARISM CHECK COMPLETED")
-        
-    except Exception as e:
-        print(f"[DEBUG] ERROR in general plagiarism check: {str(e)}")
-        if report:
-            report.update_status("failed")

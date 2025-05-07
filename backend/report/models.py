@@ -34,15 +34,24 @@ class PlagiarismReport:
         if name:
             self.name = name
         else:
-            # Generate name based on report type and documents
-            date_str = self.created_at.strftime("%d/%m/%Y")
-            doc1_name = document1.get('name', 'Unknown') if document1 else 'Unknown'
-            
+            # Helper to shorten and clean document names
+            def short_name(doc):
+                if not doc or not doc.get('name'):
+                    return 'Unknown'
+                base = doc['name'].rsplit('.', 1)[0]  # Remove extension
+                base = base.replace(' ', '_')[:15]    # Replace spaces, truncate
+                return base
+            date_str = self.created_at.strftime('%Y%m%d')
             if report_type == "comparison" and document2:
-                doc2_name = document2.get('name', 'Unknown')
-                self.name = f"Comparison: {doc1_name} vs {doc2_name} ({date_str})"
+                doc1_short = short_name(document1)
+                doc2_short = short_name(document2)
+                self.name = f"Compare_{doc1_short}_vs_{doc2_short}_{date_str}"
             else:
-                self.name = f"Check: {doc1_name} ({date_str})"
+                doc1_short = short_name(document1)
+                sources = ''
+                if check_options and 'sources' in check_options:
+                    sources = '_'.join([s.replace('user_documents', 'user').replace('academic', 'acad').replace('web', 'web') for s in check_options['sources']])
+                self.name = f"Check_{doc1_short}{'_' + sources if sources else ''}_{date_str}"
         
         # For general reports only
         if report_type == "general":
