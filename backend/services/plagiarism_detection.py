@@ -23,7 +23,8 @@ except:
     sys.exit(1)
 
 # Better model for French language embeddings
-model = SentenceTransformer('distiluse-base-multilingual-cased-v2')
+# model = SentenceTransformer('distiluse-base-multilingual-cased-v2')
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
 class PlagiarismDetectionService:
     """Base service for detecting plagiarism between documents."""
@@ -57,7 +58,7 @@ class PlagiarismDetectionService:
         if self.method == "embeddings":
             try:
                 if not model_name:
-                    model_name = "distiluse-base-multilingual-cased-v2"
+                    model_name = "all-MiniLM-L6-v2"
                 print(f"Loading embedding model: {model_name}")
                 self.embedding_model = SentenceTransformer(model_name)
                 print("Embedding model loaded successfully")
