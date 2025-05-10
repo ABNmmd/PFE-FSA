@@ -14,6 +14,7 @@ import ConfirmDeleteModal from "./ConfirmDeleteModal";
 import { useAuth } from "../context/AuthContext";
 import { useDocuments } from "../context/DocumentContext";
 import { useToast } from "../context/ToastContext";
+import { useReports } from '../context/ReportContext';
 
 function FilesManager() {
     const [showDropzone, setShowDropzone] = useState(false);
@@ -24,6 +25,7 @@ function FilesManager() {
     const { showToast } = useToast();
     const { connectGoogleDrive, connectedToDrive } = useAuth();
     const { documents, loading, uploadMultipleDocuments, fetchDocuments, downloadDocument, deleteDocument } = useDocuments();
+    const { checkDocumentPlagiarism } = useReports();
     const navigate = useNavigate();
 
     // Close dropdown when clicking outside
@@ -115,18 +117,24 @@ function FilesManager() {
         setFileToDelete(null);
     };
 
-    const handleCheckPlagiarism = (file) => {
-        showToast(`Starting plagiarism check for ${file.file_name}...`, 'loading');
-        setActiveDropdown(null);
-    };
-
-    const handleViewPlagiarismReport = (file) => {
-        navigate(`/dashboard/reports/${file.file_id}`);
-        setActiveDropdown(null);
+    const handleCheckPlagiarism = async (file) => {
+        try {
+            showToast(`Starting plagiarism check for ${file.file_name}...`, 'loading');
+            const response = await checkDocumentPlagiarism(file.file_id);
+            if (response && response.report_id) {
+                showToast('Plagiarism check started successfully!', 'success');
+                navigate(`/dashboard/reports/${response.report_id}`);
+            } else {
+                showToast('Failed to start plagiarism check. Please try again.', 'error');
+            }
+        } catch (error) {
+            console.error('Error starting plagiarism check:', error);
+            showToast('An error occurred while starting the plagiarism check.', 'error');
+        }
     };
 
     const handleCompareDocuments = (file) => {
-        navigate('/dashboard/compare');
+        navigate('/dashboard/compare', { state: { first: file.file_id || file._id } });
         setActiveDropdown(null);
     };
 
@@ -161,12 +169,16 @@ function FilesManager() {
                 </div>
             </div>
             {connectedToDrive && showDropzone && (
-                <div className="fixed top-0 left-0 w-full h-full bg-gray-500 opacity-90 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-md shadow-lg p-4 w-1/2">
-                        <h3 className="text-lg font-semibold mb-4">Upload Files</h3>
+                <div className="fixed top-0 left-0 w-full h-full bg-gray-900/75 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg shadow-lg p-6 w-1/2">
+                        <h3 className="text-lg font-semibold mb-4 text-gray-800">Upload Files</h3>
+                        <p className="text-sm text-gray-600 mb-4">Drag and drop your files here or click to select files from your computer.</p>
                         <Dropzone onFileUpload={handleFileUpload} />
-                        <div className="flex justify-end mt-4">
-                            <button className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-md focus:outline-none focus:shadow-outline mr-2" onClick={() => setShowDropzone(false)}>
+                        <div className="flex justify-end mt-6">
+                            <button 
+                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-md focus:outline-none focus:shadow-outline mr-2 cursor-pointer"
+                                onClick={() => setShowDropzone(false)}
+                            >
                                 Cancel
                             </button>
                         </div>
@@ -220,13 +232,6 @@ function FilesManager() {
                                                             >
                                                                 <MdDocumentScanner className="mr-2" />
                                                                 <span>Check for Plagiarism</span>
-                                                            </li>
-                                                            <li 
-                                                                className="px-4 py-2 hover:bg-gray-100 flex items-center cursor-pointer"
-                                                                onClick={() => handleViewPlagiarismReport(file)}
-                                                            >
-                                                                <TbReportSearch className="mr-2 text-gray-500" />
-                                                                <span>View Plagiarism Report</span>
                                                             </li>
                                                             <li 
                                                                 className="px-4 py-2 hover:bg-gray-100 flex items-center cursor-pointer"
