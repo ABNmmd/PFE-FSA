@@ -5,6 +5,7 @@ import ReportCard from '../components/ReportCard';
 import { useToast } from '../context/ToastContext';
 import Pagination from '../components/Pagination';
 import { FaPlus, FaSearch, FaFilter, FaSort, FaFileAlt, FaExchangeAlt } from 'react-icons/fa';
+import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 
 function PlagiarismReports() {
   const { reports, loading, pagination, fetchReports, deleteReport, changePage } = useReports();
@@ -15,26 +16,32 @@ function PlagiarismReports() {
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
   const [searchTerm, setSearchTerm] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     fetchReports();
   }, [pagination.page]);
 
-  const handleDeleteReport = async (report) => {
-    // Use the report name from the backend
-    const reportName = report.name || "this report";
-        
-    if (window.confirm(`Are you sure you want to delete "${reportName}"?`)) {
-      setIsDeleting(true);
-      try {
-        await deleteReport(report.id);
-        showToast('Report deleted successfully', 'success');
-      } catch (error) {
-        showToast('Failed to delete report', 'error');
-      } finally {
-        setIsDeleting(false);
-      }
+  const handleDeleteReport = (report) => {
+    setDeleteTarget(report);
+  };
+
+  const confirmDeleteReport = async (report) => {
+    setDeleteLoading(true);
+    try {
+      await deleteReport(report.id);
+      showToast('Report deleted successfully', 'success');
+      setDeleteTarget(null);
+    } catch (error) {
+      showToast('Failed to delete report', 'error');
+    } finally {
+      setDeleteLoading(false);
     }
+  };
+
+  const cancelDeleteReport = () => {
+    setDeleteTarget(null);
   };
 
   const handleDownloadReport = (report) => {
@@ -89,7 +96,7 @@ function PlagiarismReports() {
         <h1 className="text-2xl font-bold">Plagiarism Reports</h1>
         <div className="flex space-x-3">
           <Link to="/dashboard/plagiarism" className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 flex items-center">
-            <FaSearch className="mr-2" /> Check Document
+            <FaSearch className="mr-2" /> Check Plagiarism
           </Link>
           <Link to="/dashboard/compare" className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center">
             <FaExchangeAlt className="mr-2" /> Compare Documents
@@ -97,64 +104,65 @@ function PlagiarismReports() {
         </div>
       </div>
 
-      {/* Search and filters */}
-      <div className="bg-white rounded-lg shadow-md p-4 mb-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="relative">
+      {/* Search and Filters */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          {/* Search Input */}
+          <div className="relative flex-1">
             <input
               type="text"
               placeholder="Search reports..."
-              className="pl-9 pr-4 py-2 border rounded-lg w-full md:w-64"
+              className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-            <FaSearch className="absolute left-3 top-2.5 text-gray-400" />
+            <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
           </div>
-          
-          <div className="flex flex-wrap gap-3">
-            <div className="flex items-center space-x-2">
-              <label className="text-sm text-gray-600">Type:</label>
-              <select 
-                className="border rounded p-1.5"
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-              >
-                <option value="all">All Types</option>
-                <option value="comparison">Comparison</option>
-                <option value="general">General Check</option>
-              </select>
+          {/* Filters & Sort Pills */}
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Type:</span>
+              {['all','comparison','general'].map(type => (
+                <button
+                  key={type}
+                  onClick={() => setFilterType(type)}
+                  className={`px-3 py-1 rounded-full text-sm transition cursor-pointer ${filterType===type ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+                >
+                  {type==='all'?'All': type==='comparison'?'Comparison':'General'}
+                </button>
+              ))}
             </div>
-            
-            <div className="flex items-center space-x-2">
-              <label className="text-sm text-gray-600">Method:</label>
-              <select 
-                className="border rounded p-1.5"
-                value={filterMethod}
-                onChange={(e) => setFilterMethod(e.target.value)}
-              >
-                <option value="all">All Methods</option>
-                <option value="embeddings">AI Embeddings</option>
-                <option value="tfidf">TF-IDF</option>
-              </select>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Method:</span>
+              {['all','embeddings','tfidf'].map(m => (
+                <button
+                  key={m}
+                  onClick={() => setFilterMethod(m)}
+                  className={`px-3 py-1 rounded-full text-sm transition cursor-pointer ${filterMethod===m ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+                >
+                  {m==='all'?'All': m==='embeddings'?'Embeddings':'TF-IDF'}
+                </button>
+              ))}
             </div>
-            
-            <div className="flex items-center space-x-2">
-              <label className="text-sm text-gray-600">Sort:</label>
-              <select 
-                className="border rounded p-1.5"
-                value={`${sortBy}-${sortOrder}`}
-                onChange={(e) => {
-                  const [newSortBy, newSortOrder] = e.target.value.split('-');
-                  setSortBy(newSortBy);
-                  setSortOrder(newSortOrder);
-                }}
-              >
-                <option value="date-desc">Newest First</option>
-                <option value="date-asc">Oldest First</option>
-                <option value="similarity-desc">Highest Similarity</option>
-                <option value="similarity-asc">Lowest Similarity</option>
-              </select>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Sort:</span>
+              {[{id:'date-desc',label:'Newest'},{id:'date-asc',label:'Oldest'},{id:'similarity-desc',label:'High Sim'},{id:'similarity-asc',label:'Low Sim'}].map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => {const [by,order]=opt.id.split('-'); setSortBy(by); setSortOrder(order);}}
+                  className={`px-3 py-1 rounded-full text-sm transition cursor-pointer ${sortBy+'-'+sortOrder===opt.id ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
+            {/* Clear Filters */}
+            {(searchTerm||filterType!=='all'||filterMethod!=='all'||sortBy!=='date'||sortOrder!=='desc') && (
+              <button
+                onClick={() => {setSearchTerm(''); setFilterType('all'); setFilterMethod('all'); setSortBy('date'); setSortOrder('desc');}}
+                className="px-3 py-1 rounded-full bg-red-100 text-red-600 text-sm hover:bg-red-200 transition cursor-pointer"
+              >Clear All</button>
+            )}
           </div>
         </div>
       </div>
@@ -214,6 +222,13 @@ function PlagiarismReports() {
           )}
         </div>
       )}
+
+      <ConfirmDeleteModal
+        item={deleteTarget}
+        onConfirm={confirmDeleteReport}
+        onCancel={cancelDeleteReport}
+        loading={deleteLoading}
+      />
 
       {isDeleting && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

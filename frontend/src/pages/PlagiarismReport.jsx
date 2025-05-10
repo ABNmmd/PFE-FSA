@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, use } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { FaArrowLeft, FaDownload, FaSearch, FaClipboard } from 'react-icons/fa';
 import { useDocuments } from '../context/DocumentContext';
@@ -12,17 +12,6 @@ function PlagiarismReport() {
   const { getReport } = useReports();
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const pollTimerRef = useRef(null);
-  const pollCountRef = useRef(0);
-
-  // Clear any existing timer on unmount
-  useEffect(() => {
-    return () => {
-      if (pollTimerRef.current) {
-        clearTimeout(pollTimerRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     const loadReport = async () => {
@@ -30,10 +19,13 @@ function PlagiarismReport() {
       try {
         setLoading(true);
         const reportData = await getReport(reportId);
-        
-        if (reportData) {
+        console.log('Report Data:', reportData);
+        if (reportData && reportData.status === "completed") {
           setReport(reportData);
         } else {
+          if (reportData.status != "completed") {
+            showToast('Report is still being processed', 'info', 3000);
+          }
           navigate('/dashboard/reports');
         }
       } catch (error) {
@@ -46,13 +38,6 @@ function PlagiarismReport() {
     };
 
     loadReport();
-    
-    // Clear timer on effect cleanup
-    return () => {
-      if (pollTimerRef.current) {
-        clearTimeout(pollTimerRef.current);
-      }
-    };
   }, [reportId,]);
 
   const handleCopyToClipboard = (text) => {
@@ -82,8 +67,7 @@ function PlagiarismReport() {
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
           <p className="text-gray-600">Loading plagiarism report...</p>
         </div>
-      ) : report ? (
-        <>
+      ) : (
           <div className="bg-white rounded-lg shadow-md p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <div>
@@ -113,14 +97,7 @@ function PlagiarismReport() {
                   <span className="text-3xl font-bold">{(report.similarity_score || 0).toFixed(2)}%</span>
                 </div>
               </div>
-              <p className="text-center mt-4 font-medium">
-                {!report.similarity_score ? 'Analysis in progress...' :
-                 report.similarity_score < 30 ? 'Low plagiarism detected' : 
-                 report.similarity_score < 70 ? 'Moderate plagiarism detected' : 
-                 'High plagiarism detected'}
-              </p>
-              {/* Add detection method display */}
-              <p className="text-center mt-1 text-sm text-gray-500">
+              <p className="text-center mt-2 text-sm text-gray-500">
                 Detection method: <span className="font-medium">
                   {report.detection_method ? report.detection_method.toUpperCase() : 
                    (report.results && report.results.stats && report.results.stats.method) ? 
@@ -196,14 +173,6 @@ function PlagiarismReport() {
               </div>
             )}
           </div>
-        </>
-      ) : (
-        <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <p className="text-red-600 mb-4">Report not found or you don't have access to this report.</p>
-          <Link to="/dashboard/reports" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-            Back to Reports
-          </Link>
-        </div>
       )}
     </div>
   );

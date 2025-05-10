@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FaExchangeAlt, FaCheckCircle, FaTimesCircle, FaUpload } from 'react-icons/fa';
 import { DiCodeBadge } from 'react-icons/di';
 import Dropzone from '../components/Dropzone';
@@ -8,7 +8,10 @@ import { useReports } from '../context/ReportContext';
 import { useToast } from '../context/ToastContext';
 
 function CompareDocuments() {
-  const [selectedFiles, setSelectedFiles] = useState([null, null]);
+  const location = useLocation();
+  // If navigated from FilesManager compare action, pre-select first doc
+  const firstDocId = location.state?.first;
+  const [selectedFiles, setSelectedFiles] = useState([firstDocId || null, null]);
   const [loading, setLoading] = useState(false);
   const [docsLoading, setDocsLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
@@ -112,23 +115,25 @@ function CompareDocuments() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {[0, 1].map((index) => (
               <div key={index} className="border border-gray-200 rounded-lg p-4">
-                <h3 className="font-medium mb-2">Document {index + 1}</h3>
-                <select 
-                  className="w-full p-2 border border-gray-300 rounded"
-                  value={selectedFiles[index] || ''}
-                  onChange={(e) => handleFileSelect(index, e.target.value)}
-                >
-                  <option value="">Select a document</option>
-                  {documents.map((doc) => (
-                    <option key={doc._id || doc.file_id} value={doc.file_id || doc._id}>
+                <h3 className="font-medium mb-2">Choose Document {index + 1}</h3>
+                {/* Scrollable card grid for document selection */}
+                <div className="max-h-20 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {documents.map(doc => (
+                    <div
+                      key={doc.file_id}
+                      onClick={() => handleFileSelect(index, doc.file_id)}
+                      className={`p-2 border rounded cursor-pointer truncate text-sm ${selectedFiles[index] === doc.file_id ? 'bg-blue-50 border-blue-600' : 'border-gray-200 hover:bg-gray-100'}`}
+                    >
                       {doc.file_name}
-                    </option>
+                    </div>
                   ))}
-                </select>
-                
+                </div>
+                {/* Selected document preview */}
                 {getSelectedDocument(index) && (
                   <div className="mt-4 bg-gray-50 p-3 rounded">
-                    <p className="font-medium">{getSelectedDocument(index).file_name}</p>
+                    <p className="font-medium truncate" title={getSelectedDocument(index).file_name}>
+                      {getSelectedDocument(index).file_name}
+                    </p>
                     <p className="text-sm text-gray-600 mt-1">
                       Type: {getSelectedDocument(index).file_type?.toUpperCase() || 'Unknown'}
                     </p>
@@ -141,32 +146,20 @@ function CompareDocuments() {
         
         <div className="mt-6 border-t pt-4">
           <h3 className="font-medium mb-2">Detection Method</h3>
-          <div className="flex space-x-4">
-            <label className="flex items-center cursor-pointer">
-              <input
-                type="radio"
-                name="detectionMethod"
-                value="tfidf"
-                checked={detectionMethod === "tfidf"}
-                onChange={() => setDetectionMethod("tfidf")}
-                className="mr-2"
-              />
-              <span>TF-IDF (Faster)</span>
-            </label>
-            <label className="flex items-center cursor-pointer">
-              <input
-                type="radio"
-                name="detectionMethod"
-                value="embeddings"
-                checked={detectionMethod === "embeddings"}
-                onChange={() => setDetectionMethod("embeddings")}
-                className="mr-2"
-              />
-              <span>Neural Embeddings (More accurate)</span>
-            </label>
+          <div className="flex gap-4">
+            {['tfidf','embeddings'].map(m => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setDetectionMethod(m)}
+                className={`flex-1 p-2 border rounded-lg text-center transition cursor-pointer ${detectionMethod === m ? 'bg-blue-600 text-white' : 'hover:bg-gray-100'}`}
+              >
+                {m === 'tfidf' ? 'TF-IDF' : 'Embeddings'}
+              </button>
+            ))}
           </div>
         </div>
-        
+         
         <div className="flex justify-center mt-6">
           <button
             onClick={handleCompare}
