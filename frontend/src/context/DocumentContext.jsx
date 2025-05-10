@@ -177,7 +177,11 @@ export const DocumentProvider = ({ children }) => {
         const blob = new Blob([response.data], { type: 'application/pdf' });
         return URL.createObjectURL(blob);
       }
-      
+      // For Office formats and other previewable files, fetch preview URL
+      else if (['doc','docx','ppt','pptx'].includes(fileType)) {
+        const response = await api.get(`/document/content/${fileId}`);
+        return response.data.url;
+      }
       // For other file types, return null (preview not supported)
       return null;
     } catch (error) {
