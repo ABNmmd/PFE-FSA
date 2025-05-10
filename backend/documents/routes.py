@@ -164,17 +164,25 @@ def get_document_content(file_id):
     if document.get('user_id') != str(user.id):
         return jsonify({"message": "Access denied"}), 403
 
-    # Only support text files for content viewing
-    if document.get('file_type') != 'txt':
-        return jsonify({"message": "Content viewing not supported for this file type"}), 400
-
-    try:
-        with GoogleDriveService(user.google_credentials) as drive_service:
-            file_content = drive_service.download_file(file_id)
-            content = file_content.read().decode('utf-8')
+    # For text, return content; otherwise return direct link for preview
+    file_type = document.get('file_type')
+    with GoogleDriveService(user.google_credentials) as drive_service:
+        if file_type == 'txt':
+            # Download and return raw text content
+            file_stream = drive_service.download_file(file_id)
+            content = file_stream.read().decode('utf-8')
             return jsonify({"content": content}), 200
-    except Exception as e:
-        return jsonify({"message": f"Error getting file content: {str(e)}"}), 500
+        # For other supported types, make publicly viewable then return preview URL
+        try:
+            # Grant view permission to anyone with the link
+            drive_service.drive_service.permissions().create(
+                fileId=file_id,
+                body={'type': 'anyone', 'role': 'reader'}
+            ).execute()
+            preview_url = drive_service.get_download_link(file_id)
+            return jsonify({"url": preview_url}), 200
+        except Exception:
+            return jsonify({"message": "Preview not available for this file type"}), 400
 
 @document_bp.route('/<file_id>', methods=['DELETE'])
 @token_required
