@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
@@ -20,13 +20,7 @@ export const ReportProvider = ({ children }) => {
   const { token } = useAuth();
   const { showToast } = useToast();
 
-  useEffect(() => {
-    if (token) {
-      fetchReports();
-    }
-  }, [token, pagination.page, pagination.perPage]);
-
-  const fetchReports = async (showLoading = true) => {
+  const fetchReports = useCallback(async (showLoading = true) => {
     if (!token) return;
     
     if (showLoading) {
@@ -55,9 +49,15 @@ export const ReportProvider = ({ children }) => {
         setLoading(false);
       }
     }
-  };
+  }, [token, pagination.page, pagination.perPage, showToast, setLoading, setError, setReports, setPagination]);
 
-  const getReport = async (reportId) => {
+  useEffect(() => {
+    if (token) {
+      fetchReports();
+    }
+  }, [token, fetchReports]);
+
+  const getReport = useCallback(async (reportId) => {
     if (!token) return null;
     
     // Validate reportId
@@ -78,9 +78,9 @@ export const ReportProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, showToast, setLoading]);
 
-  const compareDocuments = async (doc1Id, doc2Id, method = "tfidf") => {
+  const compareDocuments = useCallback(async (doc1Id, doc2Id, method = "tfidf") => {
     if (!token) return null;
     
     setLoading(true);
@@ -121,9 +121,9 @@ export const ReportProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, showToast, setLoading, fetchReports]);
 
-  const deleteReport = async (reportId) => {
+  const deleteReport = useCallback(async (reportId) => {
     if (!token) return false;
     
     try {
@@ -137,9 +137,9 @@ export const ReportProvider = ({ children }) => {
       showToast('Failed to delete report', 'error');
       return false;
     }
-  };
+  }, [token, showToast, fetchReports]);
 
-  const getDocumentReports = async (documentId) => {
+  const getDocumentReports = useCallback(async (documentId) => {
     if (!token) return [];
     
     setLoading(true);
@@ -154,16 +154,16 @@ export const ReportProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, showToast, setLoading]);
 
-  const changePage = (newPage) => {
+  const changePage = useCallback((newPage) => {
     if (newPage > 0 && newPage <= pagination.pages) {
       setPagination(prev => ({ ...prev, page: newPage }));
     }
-  };
+  }, [pagination.pages, setPagination]); // Added pagination.pages to dependencies
 
   // General plagiarism check methods
-  const checkDocumentPlagiarism = async (documentId, options = {}) => {
+  const checkDocumentPlagiarism = useCallback(async (documentId, options = {}) => {
     try {
       const response = await api.post('/report/check', {
         document_id: documentId,
@@ -177,9 +177,9 @@ export const ReportProvider = ({ children }) => {
       console.error('Error checking document plagiarism:', error);
       throw error;
     }
-  };
+  }, [token]);
   
-  const getCheckStatus = async (reportId) => {
+  const getCheckStatus = useCallback(async (reportId) => {
     try {
       const response = await api.get(`/report/check/status/${reportId}`);
       return response.data;
@@ -187,9 +187,9 @@ export const ReportProvider = ({ children }) => {
       console.error('Error getting check status:', error);
       throw error;
     }
-  };
+  }, [token]);
   
-  const getAvailableSources = async () => {
+  const getAvailableSources = useCallback(async () => {
     try {
       const response = await api.get('/report/sources');
       setAvailableSources(response.data.sources);
@@ -198,7 +198,7 @@ export const ReportProvider = ({ children }) => {
       console.error('Error getting available sources:', error);
       return [];
     }
-  };
+  }, [token, setAvailableSources]);
 
   return (
     <ReportContext.Provider value={{
