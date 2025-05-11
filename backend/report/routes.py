@@ -381,26 +381,13 @@ def get_available_sources():
             "name": "Web Content",
             "description": "Check against web sources using Google Search API",
             "enabled": True
-        }
-    ]
-    
-    # Check if academic database access is available
-    user = User.get_user_by_id(user_id)
-    academic_access = user and hasattr(user, 'academic_access') and user.academic_access
-    
-    if academic_access:
-        sources.append({
+        },
+        {
             "id": "academic",
-            "name": "Academic Database",
+            "name": "Academic Papers",
             "description": "Check against academic papers and journals",
             "enabled": True
-        })
-    else:
-        sources.append({
-            "id": "academic",
-            "name": "Academic Database (Unavailable)",
-            "description": "Requires academic account access",
-            "enabled": False
-        })
+        }
+    ]
     
     return jsonify({"sources": sources}), 200

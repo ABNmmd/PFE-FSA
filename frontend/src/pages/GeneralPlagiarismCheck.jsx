@@ -14,7 +14,7 @@ function GeneralPlagiarismCheck() {
 
   const [selectedDocument, setSelectedDocument] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSources, setSelectedSources] = useState(['user_documents', 'web']);
+  const [selectedSources, setSelectedSources] = useState(['user_documents', 'web', 'academic']);
   const [sensitivity, setSensitivity] = useState('medium');
   const [method, setMethod] = useState('embeddings');
   // Helper for slider sensitivity mapping
@@ -25,6 +25,7 @@ function GeneralPlagiarismCheck() {
   useEffect(() => {
     fetchDocuments();
     loadSources();
+    console.log('Available sources:', availableSources);
   }, []);
 
   const loadSources = async () => {
