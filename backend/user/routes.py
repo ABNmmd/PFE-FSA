@@ -239,3 +239,15 @@ def update_profile():
             'updated_at': user.updated_at.strftime('%Y-%m-%d %H:%M:%S') if user.updated_at else None
         }
     }), 200
+
+@user_bp.route('/google/disconnect', methods=['POST'])
+@token_required
+def google_disconnect():
+    """Disconnect Google Drive by clearing stored credentials."""
+    user_id = request.user_id
+    user = User.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    # Remove credentials
+    user.update_google_credentials(None)
+    return jsonify({"message": "Google Drive disconnected successfully", "connected": False}), 200
