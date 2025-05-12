@@ -13,6 +13,13 @@ function PlagiarismReport() {
   const { showToast } = useToast();
   const navigate = useNavigate();
 
+  // Mapping source IDs to human-readable names
+  const sourceNames = {
+    user_documents: 'Your Documents',
+    web: 'Web Content',
+    academic: 'Academic Sources'
+  };
+
   useEffect(() => {
     const loadReport = async () => {
       
@@ -107,71 +114,103 @@ function PlagiarismReport() {
             </div>
 
             <h3 className="text-lg font-semibold mb-4">Matching Content</h3>
-            {report.results && report.results.matches && report.results.matches.length > 0 ? (
-              <div className="space-y-4">
-                {report.results.matches.map((match, index) => (
-                  <div key={index} className="border border-gray-200 rounded-md p-4 hover:bg-gray-50">
-                    <div className="mb-2">
-                      <span className="font-medium">Similarity: {(match.similarity * 100).toFixed(2)}%</span>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-                      <div className="bg-blue-50 p-3 rounded relative">
-                        <div className="flex justify-between items-center mb-1">
-                          <h4 className="font-medium text-sm text-blue-700">
-                            {report.document1?.name}
-                          </h4>
-                          <button 
-                            className="text-blue-500 hover:text-blue-700" 
-                            title={`Copy from ${report.document1?.name}`}
-                            onClick={() => handleCopyToClipboard(match.text1)}
-                          >
-                            <FaClipboard />
-                          </button>
-                        </div>
-                        <blockquote className="border-l-4 border-blue-500 pl-4 py-2 my-1 text-gray-700 italic text-sm">
-                          "{match.text1 || match.text}"
-                        </blockquote>
+            {report.report_type === 'comparison' ? (
+              report.results && report.results.matches && report.results.matches.length > 0 ? (
+                <div className="space-y-4">
+                  {report.results.matches.map((match, index) => (
+                    <div key={index} className="border border-gray-200 rounded-md p-4 hover:bg-gray-50">
+                      <div className="mb-2">
+                        <span className="font-medium">Similarity: {(match.similarity * 100).toFixed(2)}%</span>
                       </div>
                       
-                      <div className="bg-purple-50 p-3 rounded relative">
-                        <div className="flex justify-between items-center mb-1">
-                          <h4 className="font-medium text-sm text-purple-700">
-                            {report.document2?.name}
-                          </h4>
-                          <button 
-                            className="text-purple-500 hover:text-purple-700" 
-                            title={`Copy from ${report.document2?.name}`}
-                            onClick={() => handleCopyToClipboard(match.text2)}
-                          >
-                            <FaClipboard />
-                          </button>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                        <div className="bg-blue-50 p-3 rounded relative">
+                          <div className="flex justify-between items-center mb-1">
+                            <h4 className="font-medium text-sm text-blue-700">
+                              {report.document1?.name}
+                            </h4>
+                            <button 
+                              className="text-blue-500 hover:text-blue-700" 
+                              title={`Copy from ${report.document1?.name}`}
+                              onClick={() => handleCopyToClipboard(match.text1)}
+                            >
+                              <FaClipboard />
+                            </button>
+                          </div>
+                          <blockquote className="border-l-4 border-blue-500 pl-4 py-2 my-1 text-gray-700 italic text-sm">
+                            "{match.text1 || match.text}"
+                          </blockquote>
                         </div>
-                        <blockquote className="border-l-4 border-purple-500 pl-4 py-2 my-1 text-gray-700 italic text-sm">
-                          "{match.text2 || match.text}"
-                        </blockquote>
+                        
+                        <div className="bg-purple-50 p-3 rounded relative">
+                          <div className="flex justify-between items-center mb-1">
+                            <h4 className="font-medium text-sm text-purple-700">
+                              {report.document2?.name}
+                            </h4>
+                            <button 
+                              className="text-purple-500 hover:text-purple-700" 
+                              title={`Copy from ${report.document2?.name}`}
+                              onClick={() => handleCopyToClipboard(match.text2)}
+                            >
+                              <FaClipboard />
+                            </button>
+                          </div>
+                          <blockquote className="border-l-4 border-purple-500 pl-4 py-2 my-1 text-gray-700 italic text-sm">
+                            "{match.text2 || match.text}"
+                          </blockquote>
+                        </div>
                       </div>
+                      
+                      {match.source && (
+                        <div className="flex items-center text-sm text-gray-600 mt-2">
+                          <FaSearch className="mr-2" />
+                          <span>Source: </span>
+                          <a href={match.source} target="_blank" rel="noreferrer" className="ml-1 text-blue-600 hover:underline">
+                            {match.sourceName || match.source}
+                          </a>
+                        </div>
+                      )}
                     </div>
-                    
-                    {match.source && (
-                      <div className="flex items-center text-sm text-gray-600 mt-2">
-                        <FaSearch className="mr-2" />
-                        <span>Source: </span>
-                        <a href={match.source} target="_blank" rel="noreferrer" className="ml-1 text-blue-600 hover:underline">
-                          {match.sourceName || match.source}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  {report.status === 'pending' ? 
+                    'Analysis in progress. Results will appear here when complete.' : 
+                    'No matching content detected.'}
+                </div>
+              )
+            ) : report.report_type === 'general' ? (
+              <div className="space-y-6">
+                {report.check_options.sources.map((source) => {
+                  const sourceResult = report.source_results[source] || {};
+                  return (
+                    <div key={source} className="mb-4">
+                      <h4 className="text-lg font-medium mb-2">
+                        {sourceNames[source] || source}
+                      </h4>
+                      {sourceResult.matched_sources && sourceResult.matched_sources.length > 0 ? (
+                        sourceResult.matched_sources.map((match, idx) => (
+                          <div key={idx} className="border border-gray-200 rounded-md p-4 mb-2">
+                            <div className="font-medium">
+                              Similarity: {match.similarity.toFixed(2)}%
+                            </div>
+                            <p className="mt-1">
+                              {match.title}
+                            </p>
+                            <a href={match.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline text-sm">
+                              View Source
+                            </a>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-gray-500">No matching content detected for {sourceNames[source] || source}.</div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                {report.status === 'pending' ? 
-                  'Analysis in progress. Results will appear here when complete.' : 
-                  'No matching content detected.'}
-              </div>
-            )}
+            ) : null}
           </div>
       )}
     </div>
