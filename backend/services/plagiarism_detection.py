@@ -13,6 +13,15 @@ import spacy
 import os
 import requests
 from urllib.parse import quote_plus
+import logging
+from io import BytesIO
+import yake
+
+# Academic API configs
+CORE_API_KEY = os.getenv("CORE_API_KEY")
+CORE_API_URL = os.getenv("CORE_API_URL", "https://api.core.ac.uk/v3/search/works")
+OPENALEX_API_URL = os.getenv("OPENALEX_API_URL", "https://api.openalex.org/works")
+ACADEMIC_FETCH_LIMIT = int(os.getenv("ACADEMIC_FETCH_LIMIT", 5))
 
 # Load spaCy model - use the French model since you're working with French documents
 try:
@@ -22,9 +31,18 @@ except:
     print("French language model not found. Install with: python -m spacy download fr_core_news_sm")
     sys.exit(1)
 
-# Better model for French language embeddings
 # model = SentenceTransformer('distiluse-base-multilingual-cased-v2')
 model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# configure logger to write API responses to a file
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logger.setLevel(logging.DEBUG)
+    fh = logging.FileHandler('academic_api.log', encoding='utf-8')
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
 
 class PlagiarismDetectionService:
     """Base service for detecting plagiarism between documents."""
@@ -65,6 +83,9 @@ class PlagiarismDetectionService:
             except Exception as e:
                 print(f"Error loading embedding model: {str(e)}")
                 self.method = "tfidf"
+        
+        # YAKE will be used for keyphrase extraction
+        self.keybert = None
 
     def get_embeddings(self, texts):
         """Generate embeddings for texts based on the selected method."""
@@ -491,7 +512,7 @@ class PlagiarismDetectionService:
                 print(f"\n[DEBUG] Document 1 - First chunk sample:")
                 print(f"[DEBUG] {original_chunks1[0][:150]}..." if len(original_chunks1[0]) > 150 else f"[DEBUG] {original_chunks1[0]}")
             if original_chunks2:
-                print(f"\n[DEBUG] Document 2 - First chunk sample:")
+                print(f"[DEBUG] Document 2 - First chunk sample:")
                 print(f"[DEBUG] {original_chunks2[0][:150]}..." if len(original_chunks2[0]) > 150 else f"[DEBUG] {original_chunks2[0]}")
         
         # Calculate similarity
@@ -680,14 +701,149 @@ class PlagiarismDetectionService:
         print(f"[DEBUG] Web sources check complete. Found {len(web_matches)} sources with matches.")
 
     def check_against_academic_sources(self, text, report, threshold, user):
-        """Check document against academic sources."""
-        print(f"[DEBUG] Academic sources check not fully implemented")
-        
-        # Placeholder implementation
+        """Check document against academic sources using CORE and OpenAlex."""
+        if self.debug:
+            print("[DEBUG] Checking against academic sources")
+        # Build a focused query via noun-chunk keyphrases
+        try:
+            keyphrases = self._extract_keyphrases(text)
+            query = " ".join(keyphrases) if keyphrases else text[:100]
+        except Exception:
+            query = text[:100]
+        if self.debug:
+            print(f"[DEBUG] Academic query: '{query}'")
+        # Fetch from CORE API
+        academic_results = []
+        highest_score_pct = 0.0
+        try:
+            if CORE_API_KEY:
+                # include language filter for French
+                params = {"q": query, "limit": ACADEMIC_FETCH_LIMIT, "language": "fr"}
+                headers = {"Authorization": f"apiKey {CORE_API_KEY}"}
+                if self.debug:
+                    logger.debug(f"CORE API request params: {params}")
+                resp = requests.get(CORE_API_URL, params=params, headers=headers)
+                if self.debug:
+                    logger.debug(f"CORE API URL: {resp.url}")
+                    logger.debug(f"CORE API status: {resp.status_code}")
+                data = resp.json()
+                if self.debug:
+                    logger.debug(f"CORE API response: {data}")
+                for item in data.get("results", [])[:ACADEMIC_FETCH_LIMIT]:
+                    # only skip if language is explicitly non-French
+                    lang_info = item.get("language")
+                    if lang_info and lang_info.get("code", "").lower() != "fr":
+                        continue
+                    title = item.get("title")
+                    snippet = item.get("abstract") or ""
+                    # include direct downloadUrl if available
+                    download_url = item.get("downloadUrl") or None
+                    if self.debug and download_url:
+                        logger.debug(f"Found downloadUrl field: {download_url}")
+                    for link in item.get('links', []):
+                        if link.get('type') == 'download':
+                            download_url = link.get('url')
+                            break
+                    if not download_url:
+                        for u in item.get('sourceFulltextUrls', []):
+                            download_url = u
+                            break
+                    url = download_url or item.get("link") or item.get("id")
+                    academic_results.append({"title": title, "text": snippet, "url": url, "download_url": download_url})
+        except Exception as e:
+            if self.debug:
+                logger.debug(f"Error fetching CORE API: {e}")
+        # Fetch from OpenAlex API
+        try:
+            # include French-language filter for OpenAlex
+            params_oa = {"search": query, "per_page": ACADEMIC_FETCH_LIMIT, "filter": "language:fr", "mailto": user.email}
+            if self.debug:
+                logger.debug(f"OpenAlex API request params: {params_oa}")
+            resp_oa = requests.get(OPENALEX_API_URL, params=params_oa)
+            if self.debug:
+                logger.debug(f"OpenAlex API URL: {resp_oa.url}")
+                logger.debug(f"OpenAlex status: {resp_oa.status_code}")
+            data_oa = resp_oa.json()
+            if self.debug:
+                logger.debug(f"OpenAlex API response: {data_oa}")
+            for item in data_oa.get("results", [])[:ACADEMIC_FETCH_LIMIT]:
+                # filter out non-French papers
+                lang_oa = item.get('lang') or item.get('language')
+                if isinstance(lang_oa, str) and lang_oa.lower() != 'fr':
+                    continue
+                # apply recency filter
+                pub_date = item.get('publication_date', '')
+                title = item.get("title")
+                snippet = item.get("abstract") or ""
+                # Determine download URL from primary_location or open_access
+                download_url = None
+                primary = item.get("primary_location", {}) or {}
+                if primary.get("pdf_url"):
+                    download_url = primary.get("pdf_url")
+                elif item.get("open_access", {}).get("oa_url"):
+                    download_url = item.get("open_access").get("oa_url")
+                # Prefer download_url as access URL, else DOI or ID
+                doi = item.get("doi")
+                if download_url:
+                    url = download_url
+                elif doi:
+                    # DOI may already be a full URL
+                    url = doi if doi.lower().startswith("http") else f"https://doi.org/{doi}"
+                else:
+                    url = item.get("id")
+                academic_results.append({"title": title, "text": snippet, "url": url, "download_url": download_url})
+        except Exception as e:
+            if self.debug:
+                logger.debug(f"Error fetching OpenAlex API: {e}")
+        # Compute similarities for academic results using full-text extraction (percentage)
+        matches = []
+        highest_score_pct = 0.0
+        for res in academic_results:
+            # attempt to load full text from PDF if possible; skip download failures
+            text2_full = ""
+            if res.get("download_url"):
+                if self.debug:
+                    logger.debug(f"Attempting PDF download: {res['download_url']}")
+                try:
+                    rpdf = requests.get(res["download_url"], timeout=10)
+                    content_type = rpdf.headers.get('Content-Type', '')
+                    if rpdf.status_code == 200 and 'application/pdf' in content_type:
+                        text2_full = extract_text_content(BytesIO(rpdf.content), 'pdf', debug=False)
+                        if self.debug:
+                            logger.debug(f"Extracted {len(text2_full)} chars from academic PDF")
+                    else:
+                        if self.debug:
+                            logger.debug(f"Skipping PDF download; status {rpdf.status_code}, content-type {content_type}")
+                except Exception as e:
+                    if self.debug:
+                        logger.debug(f"Error downloading PDF {res['download_url']}: {e}")
+            # fallback to abstract snippet if no full text
+            if not text2_full and res.get("text"):
+                text2_full = res.get("text")
+                if self.debug:
+                    logger.debug(f"Using snippet fallback, length: {len(text2_full)}")
+            # skip if still no content
+            if not text2_full:
+                if self.debug:
+                    logger.debug(f"Skipping academic result with no retrievable text: {res.get('url')}")
+                continue
+            # chunk both documents for comparison
+            chunks1 = self.chunk_document_for_comparison(text)
+            chunks2 = self.chunk_document_for_comparison(text2_full)
+            # compute similarity info (includes percentage)
+            sim_info = self.calculate_similarity(chunks1, chunks2)
+            sim_pct = sim_info.get('percentage', 0.0)
+            matches.append({"title": res.get("title"), "url": res.get("url"), "similarity": sim_pct})
+            if sim_pct > highest_score_pct:
+                highest_score_pct = sim_pct
+
+        # Sort matches
+        matches.sort(key=lambda x: x["similarity"], reverse=True)
+        # Update report
         report.update_source_result("academic", {
-            "similarity_score": 0,
-            "matches_found": 0,
-            "matched_sources": []
+            "similarity_score": highest_score_pct,
+            "matches_found": len(matches),
+            "matched_sources": matches[:10]
         })
     
     def process_document_check(self, user_id, doc_id, report, threshold, sources=None, method="embeddings"):
@@ -722,7 +878,10 @@ class PlagiarismDetectionService:
             if "web" in sources:
                 self.check_against_web_sources(text, report, threshold)
                 
-            if "academic" in sources and hasattr(user, 'academic_access') and user.academic_access:
+            # Always perform academic check when selected
+            if "academic" in sources:
+                if self.debug:
+                    print("[DEBUG] Invoking academic sources check")
                 self.check_against_academic_sources(text, report, threshold, user)
         
         except Exception as e:
@@ -796,5 +955,25 @@ class PlagiarismDetectionService:
         except Exception as e:
             print(f"[DEBUG] Web search error: {str(e)}")
             return []
+
+    def _extract_keyphrases(self, text, top_n=5):
+        """Extract top N keyphrases via YAKE and spaCy noun-chunks."""
+        # Use YAKE for keyphrase extraction
+        try:
+            kw_extractor = yake.KeywordExtractor(lan="fr", n=2, top=top_n)
+            keywords = kw_extractor.extract_keywords(text)
+            candidates = [kw for kw, score in keywords]
+        except Exception:
+            candidates = []
+        # Fallback to spaCy noun-chunks if needed
+        if len(candidates) < top_n:
+            doc = nlp(text if len(text) < 10000 else text[:10000])
+            for chunk in doc.noun_chunks:
+                ph = chunk.text.lower().strip()
+                if ph and ph not in candidates:
+                    candidates.append(ph)
+                    if len(candidates) >= top_n:
+                        break
+        return candidates[:top_n]
 
 from services.plagiarism_coordinator import start_plagiarism_check_task, start_general_plagiarism_check
