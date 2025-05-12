@@ -155,24 +155,18 @@ def get_report(report_id):
         
         if not report:
             return jsonify({"message": "Report not found"}), 404
-        
-        # Check if user owns the report
+        # Check ownership
         if report.user_id != str(user_id):
             return jsonify({"message": "Access denied"}), 403
-        
-        report_dict = {
-            "id": report.id,
-            "document1": report.document1,
-            "document2": report.document2,
-            "similarity_score": report.similarity_score,
-            "created_at": report.created_at.isoformat() if hasattr(report.created_at, 'isoformat') else report.created_at,
-            "status": report.status,
-            "results": report.results
-        }
-        
-        return jsonify(report_dict), 200
+        # Convert report to dict for response
+        data = report.to_dict()
+        # Ensure created_at is serializable
+        if hasattr(report.created_at, 'isoformat'):
+            data['created_at'] = report.created_at.isoformat()
+        # Return full report including general fields if present
+        return jsonify(data), 200
     except Exception as e:
-        return jsonify({"message": f"Error fetching report: {str(e)}"}), 500
+        return jsonify({"message": str(e)}), 500
 
 @report_bp.route('/<report_id>', methods=['DELETE'])
 @token_required
