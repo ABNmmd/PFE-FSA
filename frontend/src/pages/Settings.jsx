@@ -21,7 +21,7 @@ function Settings() {
   const [isPasswordLoading, setIsPasswordLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const { user, connectGoogleDrive, connectedToDrive, updateProfile, updatePassword } = useAuth();
+  const { user, connectGoogleDrive, connectedToDrive, updateProfile, updatePassword, disconnectGoogleDrive } = useAuth();
   const { showToast } = useToast();
 
   const handlePasswordChange = async (e) => {
@@ -315,7 +315,7 @@ function Settings() {
                   </div>
                 </div>
                 <button
-                  onClick={handleGoogleDriveConnection}
+                  onClick={connectedToDrive ? disconnectGoogleDrive : handleGoogleDriveConnection}
                   className={`ml-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium cursor-pointer ${
                     connectedToDrive
                       ? 'text-gray-700 bg-gray-100 hover:bg-gray-200'
