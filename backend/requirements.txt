@@ -15,6 +15,7 @@ spacy
 torch
 sentence-transformers
 langdetect
+yake
 
 # Document processing
 python-docx
