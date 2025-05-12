@@ -98,6 +98,18 @@ export const AuthProvider = ({ children }) => {
     window.location.href = googleOAuthURL;
   };
 
+  const disconnectGoogleDrive = async () => {
+    if (!token) return false;
+    try {
+      await api.post('/user/google/disconnect');
+      setConnectedToDrive(false);
+      return true;
+    } catch (error) {
+      console.error('Failed to disconnect Google Drive', error);
+      return false;
+    }
+  };
+
   const updateProfile = async (profileData) => {
     try {
       const response = await api.post('/user/update-profile', profileData, {
@@ -135,6 +147,7 @@ export const AuthProvider = ({ children }) => {
       register, 
       logout, 
       connectGoogleDrive, 
+      disconnectGoogleDrive,
       connectedToDrive, 
       setConnectedToDrive, 
       message, 
