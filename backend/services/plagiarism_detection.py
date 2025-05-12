@@ -795,6 +795,22 @@ class PlagiarismDetectionService:
         except Exception as e:
             if self.debug:
                 logger.debug(f"Error fetching OpenAlex API: {e}")
+        # Pre-filter by snippet similarity to avoid full-text extraction on weak hits
+        if self.method == 'embeddings' and self.embedding_model:
+            # compute document embedding
+            doc_embed = self.embedding_model.encode(text, convert_to_tensor=True)
+            for r in academic_results:
+                snip = r.get('text', '')
+                if snip:
+                    emb_snip = self.embedding_model.encode(snip, convert_to_tensor=True)
+                    r['snippet_sim'] = util.pytorch_cos_sim(doc_embed, emb_snip.unsqueeze(0)).item()
+                else:
+                    r['snippet_sim'] = 0.0
+            academic_results.sort(key=lambda x: x.get('snippet_sim', 0), reverse=True)
+        # Only process top results for detailed comparison
+        academic_results = academic_results[:min(ACADEMIC_FETCH_LIMIT, 3)]
+        # Use a slightly lower threshold for academic full-text matching
+        academic_thresh = threshold * 0.8
         # Compute similarities for academic results using full-text extraction (percentage)
         matches = []
         highest_score_pct = 0.0
@@ -833,6 +849,9 @@ class PlagiarismDetectionService:
             # compute similarity info (includes percentage)
             sim_info = self.calculate_similarity(chunks1, chunks2)
             sim_pct = sim_info.get('percentage', 0.0)
+            # apply academic threshold to filter matches
+            if sim_pct < academic_thresh:
+                continue
             matches.append({"title": res.get("title"), "url": res.get("url"), "similarity": sim_pct})
             if sim_pct > highest_score_pct:
                 highest_score_pct = sim_pct

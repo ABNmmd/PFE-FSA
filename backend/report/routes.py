@@ -255,11 +255,11 @@ def check_document_plagiarism():
     
     # Convert sensitivity to threshold
     sensitivity_thresholds = {
-        'low': 0.70,      # Less sensitive - only catch very similar content
-        'medium': 0.60,   # Default sensitivity
-        'high': 0.50      # More sensitive - catch more potential matches
+        'low': 0.55,      # Less sensitive - only catch very similar content
+        'medium': 0.50,   # Default sensitivity
+        'high': 0.40      # More sensitive - catch more potential matches
     }
-    threshold = sensitivity_thresholds.get(sensitivity, 0.70)
+    threshold = sensitivity_thresholds.get(sensitivity, 0.45)
     
     # Method selection based on sensitivity or explicitly provided
     method = request.json.get('method', 'embeddings')
