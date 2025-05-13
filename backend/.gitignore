@@ -44,7 +44,6 @@ instance/
 
 # Environment variables and dotenv files
 .env
-.env.*
 
 # Database files (e.g., SQLite, Mongo dump files)
 *.db
