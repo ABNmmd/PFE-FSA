@@ -21,6 +21,7 @@ yake
 python-docx
 PyPDF2
 textract
+reportlab
 
 # Download French language model
 # Run: python -m spacy download fr_core_news_sm
