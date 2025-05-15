@@ -9,7 +9,7 @@ function PlagiarismReport() {
   const { reportId } = useParams();
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
-  const { getReport } = useReports();
+  const { getReport, downloadReport } = useReports();
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -58,6 +58,18 @@ function PlagiarismReport() {
       });
   };
 
+  // Handler for downloading the PDF report
+  const handleDownloadReport = async () => {
+    if (!report?.id) return;
+    try {
+      await downloadReport(report.id, report.name);
+      showToast('Report downloaded successfully', 'success');
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      showToast('Failed to download report', 'error');
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center mb-6">
@@ -89,7 +101,10 @@ function PlagiarismReport() {
                 </p>
               </div>
               <div className="flex space-x-2">
-                <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center">
+                <button
+                  onClick={handleDownloadReport}
+                  className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center"
+                >
                   <FaDownload className="mr-2" /> Download Report
                 </button>
               </div>

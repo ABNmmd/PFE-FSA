@@ -200,22 +200,62 @@ export const ReportProvider = ({ children }) => {
     }
   }, [token, setAvailableSources]);
 
+  // Download a report as PDF file
+  const downloadReport = useCallback(async (reportId, defaultName) => {
+    if (!token) return;
+    try {
+      const response = await api.get(`/report/${reportId}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      // Determine filename from content-disposition header
+      const disposition = response.headers['content-disposition'];
+      let filename = `${defaultName || reportId}.pdf`;
+      if (disposition) {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) filename = match[1];
+      }
+      
+      // Create a blob URL for the PDF file
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      
+      // Create a link element to trigger the download
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename); // Set the file name
+      
+      // Append to the document body
+      document.body.appendChild(link);
+      
+      // Programmatically click the link to trigger the download
+      link.click();
+      
+      // Clean up and remove the link
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      showToast('Failed to download report', 'error');
+    }
+  }, [token, showToast]);
+
   return (
     <ReportContext.Provider value={{
       reports,
       loading,
       error,
       pagination,
+      availableSources,
       fetchReports,
       getReport,
       compareDocuments,
       deleteReport,
       getDocumentReports,
       changePage,
-      availableSources,
       checkDocumentPlagiarism,
       getCheckStatus,
-      getAvailableSources
+      getAvailableSources,
+      downloadReport
     }}>
       {children}
     </ReportContext.Provider>

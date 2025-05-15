@@ -8,7 +8,7 @@ import { FaPlus, FaSearch, FaFilter, FaSort, FaFileAlt, FaExchangeAlt } from 're
 import ConfirmDeleteModal from '../components/ConfirmDeleteModal';
 
 function PlagiarismReports() {
-  const { reports, loading, pagination, fetchReports, deleteReport, changePage } = useReports();
+  const { reports, loading, pagination, fetchReports, deleteReport, changePage, downloadReport } = useReports();
   const { showToast } = useToast();
   const [isDeleting, setIsDeleting] = useState(false);
   const [filterType, setFilterType] = useState('all');
@@ -44,9 +44,14 @@ function PlagiarismReports() {
     setDeleteTarget(null);
   };
 
-  const handleDownloadReport = (report) => {
-    // This will be implemented later
-    showToast('Download feature coming soon', 'info');
+  const handleDownloadReport = async (report) => {
+    try {
+      await downloadReport(report.id, report.name);
+      showToast('Report downloaded successfully', 'success');
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      showToast('Failed to download report', 'error');
+    }
   };
 
   const handlePageChange = (page) => {
