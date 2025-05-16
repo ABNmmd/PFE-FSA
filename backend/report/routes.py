@@ -1,4 +1,8 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, make_response
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table
+from reportlab.lib.styles import getSampleStyleSheet
 from user.routes import token_required
 from report.models import PlagiarismReport
 from documents.models import Document
@@ -8,6 +12,7 @@ from services.plagiarism_coordinator import start_plagiarism_check_task, start_g
 from services.google_drive import GoogleDriveService
 from bson import ObjectId
 from datetime import datetime
+import json
 
 report_bp = Blueprint('report', __name__, url_prefix='/report')
 
@@ -385,3 +390,87 @@ def get_available_sources():
     ]
     
     return jsonify({"sources": sources}), 200
+
+@report_bp.route('/<report_id>/download', methods=['GET'])
+@token_required
+def download_report(report_id):
+    """Download a plagiarism report as PDF."""
+    user_id = request.user_id
+    try:
+        report = PlagiarismReport.get_by_id(report_id)
+        if not report:
+            return jsonify({"message": "Report not found"}), 404
+        if report.user_id != str(user_id):
+            return jsonify({"message": "Access denied"}), 403
+        # Prepare report data
+        data = report.to_dict()
+        if hasattr(report.created_at, 'isoformat'):
+            data['created_at'] = report.created_at.isoformat()
+        # Generate PDF with styled layout and header/footer
+        from reportlab.lib import colors
+        from reportlab.platypus import TableStyle, PageBreak, Paragraph as RLParagraph
+        from reportlab.pdfgen import canvas as canvas_module
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter,
+                                rightMargin=40, leftMargin=40,
+                                topMargin=60, bottomMargin=40)
+        styles = getSampleStyleSheet()
+        elements = []
+        # Title
+        elements.append(Paragraph(data.get('name','Plagiarism Report'), styles['Title']))
+        elements.append(Spacer(1, 12))
+        # Metadata
+        meta_data = [
+            ['Date', data.get('created_at')],
+            ['Method', data.get('detection_method','').upper()],
+            ['Overall Score', f"{(data.get('similarity_score') or 0):.2f}%"]
+        ]
+        meta_table = Table(meta_data, colWidths=[100, 360])
+        meta_table.setStyle(TableStyle([
+            ('BACKGROUND',(0,0),(1,0),colors.lightgrey),
+            ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
+            ('GRID',(0,0),(-1,-1),0.5,colors.grey)
+        ]))
+        elements.append(meta_table)
+        elements.append(Spacer(1, 20))
+        # Matches section with paragraph layout and improved styling
+        if data.get('report_type') == 'comparison':
+            elements.append(Paragraph('Comparison Matches', styles['Heading2']))
+            for idx, m in enumerate(data.get('results', {}).get('matches', []) or [], start=1):
+                sim_pct = m.get('similarity', 0) * 100
+                elements.append(Paragraph(f"Match {idx}: Similarity {(sim_pct):.2f}%", styles['Heading3']))
+                elements.append(Paragraph('Document 1 Excerpt:', styles['Heading4']))
+                elements.append(Paragraph(m.get('text1', m.get('text', '')), styles['Normal']))
+                elements.append(Spacer(1, 6))
+                elements.append(Paragraph('Document 2 Excerpt:', styles['Heading4']))
+                elements.append(Paragraph(m.get('text2', m.get('text', '')), styles['Normal']))
+                elements.append(Spacer(1, 12))
+        else:
+            elements.append(Paragraph('General Plagiarism Check Results', styles['Heading2']))
+            for src in data.get('check_options', {}).get('sources', []):
+                elements.append(Paragraph(f"Source: {src.title().replace('_',' ')}", styles['Heading3']))
+                for idx, m in enumerate(data.get('source_results', {}).get(src, {}).get('matched_sources', []), start=1):
+                    # similarity already in percentage (0-100)
+                    sim_pct = m.get('similarity', 0)
+                    elements.append(Paragraph(f"{idx}. {m.get('title', 'Untitled')} - {sim_pct:.2f}%", styles['Heading4']))
+                    elements.append(Paragraph(m.get('url', ''), styles['Normal']))
+                    elements.append(Spacer(1, 12))
+        # Header/footer callback
+        def _header_footer(canvas, doc):
+            canvas.saveState()
+            canvas.setFont('Helvetica-Bold',9)
+            canvas.drawString(40, doc.pagesize[1]-45, data.get('name','Plagiarism Report'))
+            page_num = canvas.getPageNumber()
+            canvas.setFont('Helvetica',8)
+            canvas.drawRightString(doc.pagesize[0]-40, 20, f"Page {page_num}")
+            canvas.restoreState()
+        # Build PDF
+        doc.build(elements, onFirstPage=_header_footer, onLaterPages=_header_footer)
+        pdf = buffer.getvalue()
+        buffer.close()
+        response = make_response(pdf)
+        response.headers['Content-Disposition'] = f'attachment; filename={report.name}.pdf'
+        response.mimetype = 'application/pdf'
+        return response
+    except Exception as e:
+        return jsonify({"message": f"Error generating report: {str(e)}"}), 500
